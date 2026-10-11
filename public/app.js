@@ -1,13 +1,13 @@
 import { FLOWS, CASES, SIGNALS, GAMES, COLORS, CHALLENGES } from './content.js';
 import * as L from './logic.js';
 
-const KEY = 'reimagine-v2', CKEY = 'reimagine-cases';
+const KEY = 'reimagine-v2', CKEY = 'reimagine-cases', AKEY = 'reimagine-ai';
 const blank = () => ({ mode: null, name: '', caseName: '', caseId: null, brief: '', quotes: [], probe: null, ev: {}, stage: 0, f: {}, notes: [], rows: {}, steps: [], focus: null, votes: {}, scenario: null, proto: '', chat: [], score: {} });
 let S = blank();
 try { S = { ...S, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { /* corrupt or unavailable storage: start fresh */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode */ } };
 const uid = () => Math.random().toString(36).slice(2, 9);
-let AI = false, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, home = false, live = [];
+let AI = false, PROV = {}, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, home = false, live = [];
 let custom = [];
 try { custom = JSON.parse(localStorage.getItem(CKEY)) || []; } catch { /* no saved processes */ }
 
@@ -39,7 +39,7 @@ function applyCase(c) {
 }
 async function createProcess(text, status) {
   let c = null;
-  if (AI) try { status.textContent = 'Designing your process…'; let t = ''; await stream({ system: 'You design realistic, fictional business process cases as strict JSON.', messages: [{ role: 'user', content: L.processPrompt(text) }], effort: 'low' }, (d) => { t += d; }); c = L.parseProcess(t); } catch { /* fall back to the offline split */ }
+  if (AI) try { status.textContent = 'Designing your process…'; let t = ''; await stream({ system: 'You design realistic, fictional business process cases as strict JSON.', messages: [{ role: 'user', content: L.processPrompt(text) }], effort: 'low', json: true }, (d) => { t += d; }); c = L.parseProcess(t); } catch { /* fall back to the offline split */ }
   c ||= L.processFromText(text);
   Object.assign(c, { id: 'c' + uid(), sub: 'Your process' });
   custom.push(c);
@@ -78,6 +78,7 @@ function renderSetup() {
     h('p', { class: 'lead' }, 'A self-guided session: map today\'s reality, reimagine the process with people and AI side by side, and leave with a working prototype. A coach is with you all the way.'),
     FLOWS[S.mode] && h('div', { class: 'resume' }, h('span', {}, `Session in progress: ${flow().name} · ${S.caseName}`), h('button', { class: 'primary', onclick: () => { home = false; render(); } }, 'Continue →')),
     h('label', { class: 'who-plays' }, 'Who is playing?', name),
+    h('p', { class: 'hint' }, 'Coach: ' + aiLabel() + ' · ', h('button', { class: 'aibtn', onclick: aiSettings }, '⚙ AI settings')),
     h('h2', {}, h('i', {}, '1'), 'Choose your session'), modes,
     h('h2', {}, h('i', {}, '2'), 'Choose a process'), cases,
     h('div', { class: 'newproc' }, h('b', {}, 'Or describe a new process'), prompt, h('div', { class: 'bar' }, create, pstatus)),
@@ -223,7 +224,7 @@ const W = {
     const gen = async (useAI) => {
       status.textContent = 'Drafting…';
       let sc = null;
-      if (useAI) try { let t = ''; await stream({ system: 'You write concise process scenarios as strict JSON.', messages: [{ role: 'user', content: L.scenarioPrompt(S, flow()) }], effort: 'medium' }, (d) => { t += d; status.textContent = `Drafting… ${t.length} chars`; }); sc = L.parseScenario(t); } catch { /* fall through to the offline draft */ }
+      if (useAI) try { let t = ''; await stream({ system: 'You write concise process scenarios as strict JSON.', messages: [{ role: 'user', content: L.scenarioPrompt(S, flow()) }], effort: 'medium', json: true }, (d) => { t += d; status.textContent = `Drafting… ${t.length} chars`; }); sc = L.parseScenario(t); } catch { /* fall through to the offline draft */ }
       if (!sc && useAI) toast('The coach model did not answer, so this is the offline draft.');
       S.scenario = sc || L.buildScenario(S); save(); renderStage();
     };
@@ -256,7 +257,7 @@ const W = {
       // Sandboxed without same-origin, and no network: generated code cannot reach this app's storage or the internet.
       S.proto && h('iframe', { class: 'proto', title: 'Prototype preview', sandbox: 'allow-scripts', srcdoc: `<meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob:">` + S.proto }),
       S.proto && AI && h('div', { class: 'bar' }, change, h('button', { class: 'add', onclick: () => change.value.trim() && build(change.value.trim()) }, 'Apply change')),
-      S.proto && !AI && h('p', { class: 'hint' }, 'This is the built-in simulation of your scenario. Connect a model (see README) to generate custom screens and request changes in plain language.'));
+      S.proto && !AI && h('p', { class: 'hint' }, 'This is the built-in simulation of your scenario. Connect a model (⚙ in the coach panel) to generate custom screens and request changes in plain language.'));
   },
 
   mail: () => {
@@ -275,8 +276,21 @@ const W = {
 
   summary: () => h('div', { class: 'panel' }, h('h3', {}, 'Take it with you'), h('div', { class: 'bar' },
     h('button', { class: 'primary', onclick: () => { const a = h('a', { href: URL.createObjectURL(new Blob([L.summaryMd(S, flow())], { type: 'text/markdown' })), download: 'reimagination-summary.md' }); a.click(); URL.revokeObjectURL(a.href); } }, 'Download summary (.md)'),
-    h('button', { class: 'add', onclick: () => window.print() }, 'Print this board'))),
+    h('button', { class: 'add', onclick: () => window.print() }, 'Print this board'),
+    PROV.builder && h('button', { class: 'add', title: 'Opens AI Builder with this session as a draft build', onclick: toBuilder }, 'Continue to Build →'))),
 };
+// Hands this session to the AI Builder app: it opens there, says it is ready, and only then receives the board.
+function toBuilder() {
+  const w = window.open(PROV.builder + '/#import');
+  if (!w) return toast('Allow pop-ups for this page to open AI Builder.');
+  const on = (e) => {
+    if (e.origin !== PROV.builder || e.data !== 'builder-ready') return;
+    removeEventListener('message', on);
+    w.postMessage({ type: 'reimagination-session', session: S }, PROV.builder);
+    toast('Sent to AI Builder as a draft build.');
+  };
+  addEventListener('message', on);
+}
 
 /* ---------- stage ---------- */
 // The clock element is rebuilt on every render, so the interval looks it up by id.
@@ -311,8 +325,38 @@ function renderStage() {
 }
 
 /* ---------- coach ---------- */
+// Which model answers: the user's choice in AI settings, else the server's Claude key, else a local Ollama model, else none (guide mode).
+let cfg = { provider: 'auto', model: '', key: '' };
+try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem(AKEY)) }; } catch { /* defaults */ }
+function active() {
+  const o = PROV.ollama || {}, a = PROV.anthropic || {};
+  const ollama = o.ok && o.models.length ? { provider: 'ollama', model: o.models.includes(cfg.model) ? cfg.model : o.models.find((m) => /mistral/i.test(m)) || o.models[0] } : null;
+  const claude = a.ok && (cfg.key || a.server) ? { provider: 'anthropic', model: a.models[0] } : null;
+  return cfg.provider === 'guide' ? null : cfg.provider === 'ollama' ? ollama : cfg.provider === 'anthropic' ? claude : (a.server && claude) || ollama || claude;
+}
+const aiLabel = () => { const m = active(); return !m ? 'guide mode' : m.provider === 'ollama' ? `local · ${m.model}` : 'Claude'; };
+async function loadStatus() { try { PROV = await (await fetch('/api/status')).json(); } catch { PROV = {}; } AI = !!active(); }
+function aiSettings() {
+  const o = PROV.ollama || { models: [] }, a = PROV.anthropic || {};
+  const key = h('input', { type: 'password', autocomplete: 'off', value: cfg.key, placeholder: 'sk-ant-…', 'aria-label': 'Anthropic API key' });
+  const model = h('select', { 'aria-label': 'Local model' }, o.models.map((m) => h('option', { value: m, selected: m === (active()?.provider === 'ollama' ? active().model : cfg.model) }, m)));
+  const opt = (v, title, note, extra) => h('label', { class: 'aiopt' }, h('input', { type: 'radio', name: 'prov', value: v, checked: cfg.provider === v }), h('span', {}, h('b', {}, title), h('small', {}, note), extra));
+  dialog('AI settings', [
+    opt('auto', 'Automatic', 'Use the server\'s Claude key if there is one, otherwise a local model, otherwise guide mode.'),
+    opt('ollama', 'Local model (Ollama)', o.ok ? (o.models.length ? 'Runs on the machine hosting this app. Nothing leaves it.' : 'Ollama is running but has no models. Run: ollama pull mistral') : 'Ollama is not running on the host. Install it from ollama.com, then: ollama pull mistral', o.models.length > 0 && model),
+    opt('anthropic', 'Claude with my own API key', a.ok ? (a.server ? 'This server already has a key; leave the field empty to use it.' : 'Your key is kept in this browser only and sent with each request. Board text goes to the Anthropic API.') : 'The Anthropic SDK is not installed on the server (npm install).', a.ok && key),
+    opt('guide', 'Guide mode (no AI)', 'Scripted coach, offline scenario and built-in prototype.'),
+    h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: async () => {
+      cfg = { provider: document.querySelector('input[name=prov]:checked')?.value || 'auto', model: model.value || '', key: key.value.trim() };
+      try { localStorage.setItem(AKEY, JSON.stringify(cfg)); } catch { /* private mode: applies to this visit only */ }
+      await loadStatus(); $('dlg').close(); render(); toast('Coach: ' + aiLabel());
+    } }, 'Save'), h('span', { class: 'hint' }, 'Now: ' + aiLabel())),
+  ]);
+}
 async function stream(body, onText) {
-  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const m = active();
+  if (!m) throw new Error('No model');
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json', ...(m.provider === 'anthropic' && cfg.key ? { 'x-api-key': cfg.key } : {}) }, body: JSON.stringify({ ...body, provider: m.provider, model: m.model }) });
   if (!r.ok) throw new Error(await r.text());
   const rd = r.body.getReader(), dec = new TextDecoder();
   for (;;) { const { done, value } = await rd.read(); if (done) break; onText(dec.decode(value, { stream: true })); }
@@ -322,7 +366,7 @@ function chatPanel() {
   const draw = () => {
     const msgs = S.chat.length ? S.chat : [{ role: 'assistant', content: `Hi${S.name ? ' ' + S.name : ''}, I am your coach for this session. Ask me anything, or use the buttons below when you are stuck.` }];
     log.replaceChildren(...msgs.map((m) => h('div', { class: 'msg ' + m.role }, m.content.split('\n').map((line) => {
-      const b = m.role === 'assistant' && line.match(/^\s*[-*]\s+(.+)/);
+      const b = m.role === 'assistant' && line.match(/^\s*(?:[-*•]|\d+[.)])\s+"?(.+?)"?\s*$/);
       return b ? h('div', { class: 'sug' }, h('span', {}, b[1]), h('button', { title: 'Add as sticky note', 'aria-label': 'Add as sticky note: ' + b[1], onclick: () => { addNote(activeZone, b[1].replace(/\*\*/g, '')); toast(activeZone === 'parking' ? 'Added to the parking lot.' : 'Added to the selected area.'); renderStage(); } }, '+')) : h('p', {}, line);
     }))));
     log.scrollTop = log.scrollHeight;
@@ -340,7 +384,7 @@ function chatPanel() {
   };
   const input = h('textarea', { rows: 2, placeholder: 'Ask the coach…', 'aria-label': 'Message the coach', onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); input.value = ''; } } });
   draw();
-  return h('aside', { class: 'glass chat' }, h('h3', {}, 'Coach ', h('small', {}, AI ? '· AI connected' : '· guide mode')),
+  return h('aside', { class: 'glass chat' }, h('h3', {}, 'Coach ', h('button', { class: 'aibtn', title: 'AI settings', onclick: aiSettings }, '⚙ ' + aiLabel())),
     log,
     h('div', { class: 'chips' }, ['What should I do here?', 'Challenge my board', 'Suggest sticky notes'].map((c) => h('button', { onclick: () => ask(c) }, c))),
     h('div', { class: 'bar' }, input, h('button', { class: 'primary', 'aria-label': 'Send', onclick: () => { ask(input.value); input.value = ''; } }, '↑')));
@@ -351,7 +395,7 @@ function dialog(title, kids) {
   const d = $('dlg');
   d.replaceChildren(h('header', {}, h('h2', {}, title), h('button', { 'aria-label': 'Close', onclick: () => d.close() }, '×')), h('div', { class: 'dbody' }, kids));
   if (!d.open) d.showModal();
-  d.onclose = () => S.mode && renderStage();
+  d.onclose = () => S.mode && !home && renderStage();
 }
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 3200); }
 function finish(key, pts, body) { S.score[key] = Math.max(S.score[key] ?? 0, pts); save(); body.replaceChildren(h('h3', {}, `Done: ${pts} points`), h('p', {}, `Your best: ${S.score[key]} points.`), h('button', { class: 'primary', onclick: () => openGame(key) }, 'Play again')); }
@@ -389,4 +433,4 @@ function openGame(key) {
 }
 
 function render() { if (home || !FLOWS[S.mode]) return renderSetup(); timer.left ||= stage().mins * 60; renderStage(); }
-fetch('/api/status').then((r) => r.json()).then((j) => { AI = !!j.ai; render(); }).catch(() => render());
+loadStatus().then(render);

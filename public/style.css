@@ -150,3 +150,9 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 @media (max-width:1100px){.top{grid-template-columns:1fr}.tools{justify-content:flex-start;max-width:none}.layout,.layout.nochat{grid-template-columns:1fr}.chat{position:static;max-height:520px}.fstack .field{grid-template-columns:1fr}.fstack .warn{grid-column:1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media print{body{background:#fff;color:#000}.tools,.steps,.chat,.add,.gamecta,.grip{display:none!important}.layout{display:block;padding:0}.glass,.panel,.zone{background:none;border:1px solid #ccc;backdrop-filter:none;box-shadow:none}textarea,input{color:#000}.obj b,.obj p,.ttl h1,.pill input,.hint,.step p{color:#000}}
+
+/* AI settings */
+.aibtn{font-size:12px;padding:2px 9px;border-radius:99px;font-weight:300;vertical-align:middle}
+.aiopt{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--soft);border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer}
+.aiopt:has(input:checked){border-color:var(--yellow)}.aiopt>input{width:auto;margin-top:4px;accent-color:var(--yellow)}
+.aiopt span{display:grid;gap:4px;flex:1}.aiopt small{color:var(--grey)}
