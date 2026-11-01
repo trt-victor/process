@@ -11,6 +11,7 @@ export const providers = {
   // A model running on this machine through Ollama (https://ollama.com). Nothing leaves the computer.
   ollama: {
     async status() {
+      if (process.env.VERCEL && !process.env.OLLAMA_URL) return { ok: false, models: [] }; // no local model in the cloud
       try {
         const r = await fetch(OLLAMA + '/api/tags', { signal: AbortSignal.timeout(1500) });
         return { ok: r.ok, models: ((await r.json()).models || []).map((m) => m.name) };
@@ -48,6 +49,19 @@ export const providers = {
       });
       for await (const ev of s) if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') yield ev.delta.text;
       if ((await s.finalMessage()).stop_reason === 'refusal') throw new Error('The model declined this request');
+    },
+    // Read a handwritten sticky note (PNG data URL from the pen pad) and return plain text.
+    async transcribe({ image, key }) {
+      if (!Anthropic || !(key || serverKey())) throw new Error('No Anthropic credentials');
+      const client = key ? new Anthropic({ apiKey: key }) : new Anthropic();
+      const [, media_type, data] = image.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/) || [];
+      if (!data) throw Object.assign(new Error('Bad image'), { status: 400 });
+      const r = await client.messages.create({
+        model: process.env.HANDWRITING_MODEL || CLAUDE_MODEL, max_tokens: 400,
+        system: 'You transcribe handwriting from workshop sticky notes. Reply with only the words written on the note, keeping line breaks. Fix obvious letter-shape ambiguity using context, but do not add, summarise or translate anything. If nothing legible is written, reply with an empty string.',
+        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type, data } }, { type: 'text', text: 'Transcribe this sticky note.' }] }],
+      });
+      return r.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim().replace(/^"(.*)"$/s, '$1');
     },
   },
 };

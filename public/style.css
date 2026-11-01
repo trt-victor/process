@@ -174,6 +174,19 @@ table.rows{width:100%;border-collapse:separate;border-spacing:6px}
 .sticky:hover .grip,.sticky:focus-within .grip{opacity:.8}
 .sticky .grip button{border:0;background:none;color:var(--ink);padding:0 4px;font-size:13px}
 .c-yellow{background:#fff176}.c-orange{background:#ffcf99}.c-green{background:#c8f0a8}.c-pink{background:#ffc2cc}.c-purple{background:#d9cfff}.c-white{background:#f1f1f5}
+.zone>header .add+.add{margin-left:0}
+.add.pen{font-size:14px;padding:2px 9px}
+.sticky img.ink{display:block;width:100%;height:auto;max-height:92px;object-fit:contain;cursor:pointer}
+.sticky.inked textarea{min-height:22px}
+/* touchscreens have no hover: keep the note controls visible and big enough for a finger */
+@media (hover:none){.sticky .grip{opacity:.75}.sticky .grip button{padding:4px 8px;font-size:16px}.zone>header .add{padding:6px 12px;font-size:13px}}
+/* pen pad */
+dialog.wide{width:min(1000px,96vw)}
+.padwrap{display:flex;justify-content:center}
+canvas.pad{display:block;width:auto;height:auto;max-width:100%;max-height:min(56vh,600px);border-radius:4px;touch-action:none;cursor:crosshair;
+  box-shadow:0 1px 1px rgba(0,0,0,.06),0 10px 24px -8px rgba(26,26,36,.3);
+  background-image:repeating-linear-gradient(transparent 0 63px,rgba(26,26,36,.08) 63px 64px)}
+.padst{margin-top:10px}
 
 /* dream state semicircles */
 .arcs{padding-top:6px}

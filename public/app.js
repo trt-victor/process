@@ -2,10 +2,45 @@ import { FLOWS, CASES, SIGNALS, GAMES, COLORS, CHALLENGES, PRINCIPLES, PILOT, BR
 import * as L from './logic.js';
 
 const KEY = 'reimagine-v2', CKEY = 'reimagine-cases', AKEY = 'reimagine-ai';
-const blank = () => ({ mode: null, name: '', caseName: '', caseId: null, brief: '', quotes: [], probe: null, ev: {}, stage: 0, f: {}, notes: [], rows: {}, steps: [], focus: null, votes: {}, svotes: {}, scenario: null, proto: '', chat: [], score: {} });
+const newId = () => crypto.randomUUID?.() || '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+const blank = () => ({ sid: newId(), updatedAt: 0, mode: null, name: '', caseName: '', caseId: null, brief: '', quotes: [], probe: null, ev: {}, stage: 0, f: {}, notes: [], rows: {}, steps: [], focus: null, votes: {}, svotes: {}, scenario: null, proto: '', chat: [], score: {} });
 let S = blank();
 try { S = { ...S, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { /* corrupt or unavailable storage: start fresh */ }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode */ } };
+if (!S.sid) S.sid = newId();
+const saveLocal = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode */ } };
+const save = () => { S.updatedAt = Date.now(); saveLocal(); queueSync(); };
+
+// Server copy of the session (Supabase or local files, see store.js): debounced after every change, so the board and
+// the coach chat survive refreshes, page changes and switching device (open the same ?s=<id> link).
+let syncT = null, syncing = Promise.resolve();
+function queueSync() {
+  if (!PROV.storage || !S.mode) return;
+  clearTimeout(syncT); syncT = setTimeout(syncNow, 1200);
+}
+function syncNow() {
+  clearTimeout(syncT); syncT = null;
+  if (!PROV.storage || !S.mode) return syncing;
+  const body = JSON.stringify({ id: S.sid, state: S });
+  return (syncing = syncing.then(() => fetch('/api/state', { method: 'PUT', headers: { 'content-type': 'application/json' }, body, keepalive: body.length < 60000 })
+    .then((r) => { if (!r.ok) throw new Error(r.status); }).catch(() => { syncT = setTimeout(syncNow, 10000); })));
+}
+addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && syncT) syncNow(); });
+async function loadRemote() {
+  const id = new URLSearchParams(location.search).get('s');
+  if (!PROV.storage || !id) return;
+  try {
+    const r = await fetch('/api/state?id=' + encodeURIComponent(id));
+    if (r.status === 404) { if (id !== S.sid) toast('That session link was not found; showing this device\'s board.'); return; }
+    const { state } = await r.json();
+    if (state.sid !== S.sid || (state.updatedAt || 0) > (S.updatedAt || 0)) { S = { ...blank(), ...state, sid: id }; saveLocal(); }
+  } catch { toast('Could not load the saved session; working from this device.'); }
+}
+const sessionUrl = () => `${location.origin}${location.pathname}?s=${S.sid}`;
+function markUrl() {
+  if (!PROV.storage) return;
+  const want = S.mode && !home ? '?s=' + S.sid : '';
+  if (location.search !== want) history.replaceState(null, '', location.pathname + want);
+}
 const uid = () => Math.random().toString(36).slice(2, 9);
 let AI = false, PROV = {}, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, home = false, live = [];
 let custom = [];
@@ -153,7 +188,7 @@ function renderSetup() {
   const start = () => {
     if (S.mode && (S.notes.length || Object.keys(S.f).length) && !confirm('Start a new session? This clears your current board.')) return;
     clearInterval(timer.id); timer = { left: 0, id: null }; home = false;
-    S = { ...blank(), mode, name: name.value.trim() }; applyCase(cur()); render();
+    S = { ...blank(), mode, name: name.value.trim() }; applyCase(cur()); save(); render();
   };
   draw();
   $('app').replaceChildren(h('div', { class: 'setup card' },
@@ -172,13 +207,90 @@ function renderSetup() {
 
 /* ---------- sticky notes ---------- */
 function sticky(n, redraw) {
-  const ta = h('textarea', { value: n.text, placeholder: 'Type here…', 'aria-label': 'Sticky note', oninput: (e) => { n.text = e.target.value; save(); } });
-  const el = h('div', { class: 'sticky c-' + n.color, draggable: true, ondragstart: (e) => e.dataTransfer.setData('text/plain', n.id) },
+  const ta = h('textarea', { value: n.text, placeholder: n.ink ? '' : 'Type here…', 'aria-label': 'Sticky note', oninput: (e) => { n.text = e.target.value; save(); } });
+  const el = h('div', { class: 'sticky c-' + n.color + (n.ink ? ' inked' : ''), draggable: true, ondragstart: (e) => e.dataTransfer.setData('text/plain', n.id) },
     h('div', { class: 'grip' },
+      h('button', { title: 'Write by hand', 'aria-label': 'Write on this note by hand', onclick: () => penPad(n) }, '✎'),
       h('button', { title: 'Change colour', 'aria-label': 'Change colour', onclick: () => { n.color = COLORS[(COLORS.indexOf(n.color) + 1) % COLORS.length]; save(); redraw(); } }, '◐'),
       h('button', { title: 'Delete note', 'aria-label': 'Delete note', onclick: () => { S.notes = S.notes.filter((x) => x !== n); delete S.votes[n.id]; save(); redraw(); } }, '×')),
+    n.ink && h('img', { class: 'ink', src: n.ink, alt: 'Handwritten note', title: 'Tap ✎ to convert to text', onclick: () => penPad(n) }),
     ta);
   return el;
+}
+
+// Pen pad: write on a big sticky with finger, stylus or mouse, then turn it into text.
+// Reads with the browser's own handwriting recognizer where there is one, otherwise with Claude (vision).
+// Without either, the drawing is kept on the note as ink and can be converted later.
+const canClaude = () => cfg.provider !== 'guide' && PROV.anthropic?.ok && !!(cfg.key || PROV.anthropic.server);
+function penPad(n) {
+  const W = 960, H = 640, strokes = [];
+  let cur = null, penSeen = false, busy = false;
+  const cv = h('canvas', { width: W, height: H, class: 'pad c-' + n.color, 'aria-label': 'Handwriting area: write your note here' });
+  const ctx = cv.getContext('2d');
+  const st = h('p', { class: 'hint padst', role: 'status' }, canClaude() || 'createHandwritingRecognizer' in navigator ? 'Write your note, then tap "Convert to text".' : 'Write your note. No AI is connected, so it is kept as handwriting (connect Claude in ⚙ AI settings to convert).');
+  const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height, t: Math.round(e.timeStamp) }; };
+  const paint = (c, pts) => { c.lineWidth = 6; c.lineCap = c.lineJoin = 'round'; c.strokeStyle = '#1a1a24'; c.beginPath(); pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y))); if (pts.length === 1) c.lineTo(pts[0].x + .1, pts[0].y); c.stroke(); };
+  const redrawAll = () => { ctx.clearRect(0, 0, W, H); if (bg) ctx.drawImage(bg, 0, 0, W, H); strokes.forEach((s) => paint(ctx, s.pts)); };
+  let bg = null;
+  if (n.ink) { const im = new Image(); im.onload = () => { bg = im; redrawAll(); }; im.src = n.ink; }
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'pen') penSeen = true; else if (penSeen && e.pointerType === 'touch') return; // palm rejection once a stylus is used
+    e.preventDefault(); cv.setPointerCapture(e.pointerId); cur = { type: e.pointerType, pts: [pt(e)] }; strokes.push(cur); paint(ctx, cur.pts);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!cur || !cv.hasPointerCapture(e.pointerId)) return;
+    const last = cur.pts.length - 1;
+    for (const ev of e.getCoalescedEvents?.() || [e]) cur.pts.push(pt(ev));
+    paint(ctx, cur.pts.slice(last));
+  });
+  const end = () => { cur = null; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+
+  // What the model sees: the whole pad (earlier ink + new strokes) in black on white. Kept ink: a small transparent copy.
+  const forModel = () => { const c = h('canvas', { width: W, height: H }), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.drawImage(cv, 0, 0); return c.toDataURL('image/png'); };
+  const inkThumb = () => { const c = h('canvas', { width: 300, height: 200 }); c.getContext('2d').drawImage(cv, 0, 0, 300, 200); return c.toDataURL('image/png'); };
+  async function recognise() {
+    if (!bg && 'createHandwritingRecognizer' in navigator) try {
+      const rec = await navigator.createHandwritingRecognizer({ languages: ['en'] });
+      const d = rec.startDrawing({ recognitionType: 'text', inputType: strokes[0]?.type === 'pen' ? 'stylus' : strokes[0]?.type || 'touch' });
+      for (const s of strokes) { const hs = new HandwritingStroke(); s.pts.forEach((p) => hs.addPoint(p)); d.addStroke(hs); }
+      const text = (await d.getPrediction())?.[0]?.text?.trim(); d.clear(); rec.finish();
+      if (text) return text;
+    } catch { /* not supported for this language/device: fall through to Claude */ }
+    if (!canClaude()) return null;
+    const r = await fetch('/api/handwriting', { method: 'POST', headers: { 'content-type': 'application/json', ...(cfg.key ? { 'x-api-key': cfg.key } : {}) }, body: JSON.stringify({ image: forModel() }) });
+    if (!r.ok) throw new Error(await r.text());
+    return (await r.json()).text;
+  }
+  const keepInk = () => { if (!strokes.length) return $('dlg').close(); n.ink = inkThumb(); save(); $('dlg').close(); toast('Kept as handwriting. Tap ✎ on the note to convert it later.'); };
+  const convert = async (e) => {
+    const btn = e.currentTarget;
+    if (busy) return;
+    if (!strokes.length && !bg) { st.textContent = 'Write something first.'; return; }
+    busy = true; btn.disabled = true; st.textContent = 'Reading your handwriting…';
+    try {
+      const text = await recognise();
+      if (text == null) return keepInk();
+      if (!text) { st.textContent = 'Could not read that. Try writing a bit larger, or keep it as handwriting.'; return; }
+      n.text = n.text?.trim() ? n.text.trim() + '\n' + text : text; delete n.ink; save(); $('dlg').close(); toast('✓ Converted to text. You can still edit it.');
+    } catch { st.textContent = 'The AI could not read it right now. Try again, or keep it as handwriting.'; }
+    finally { busy = false; btn.disabled = false; }
+  };
+  dialog('Write on the note', [
+    h('div', { class: 'padwrap' }, cv), st,
+    h('div', { class: 'bar' },
+      h('button', { onclick: () => { strokes.pop(); redrawAll(); } }, '↶ Undo'),
+      h('button', { onclick: () => { strokes.length = 0; redrawAll(); } }, 'Clear'),
+      h('span', { style: 'flex:1' }),
+      h('button', { class: 'ghost', onclick: keepInk }, 'Keep as handwriting'),
+      h('button', { class: 'primary', onclick: convert }, 'Convert to text ✓')),
+  ]);
+  $('dlg').classList.add('wide');
+  const fresh = !n.text?.trim() && !n.ink;
+  $('dlg').addEventListener('close', () => {
+    $('dlg').classList.remove('wide');
+    if (fresh && !n.text?.trim() && !n.ink && S.notes.includes(n)) { S.notes = S.notes.filter((x) => x !== n); save(); renderStage(); }
+  }, { once: true });
 }
 function addNote(zoneId, text = '', color = 'yellow') { const n = { id: uid(), zone: zoneId, text, color }; S.notes.push(n); save(); return n; }
 function zoneEl(z, inner) {
@@ -188,7 +300,8 @@ function zoneEl(z, inner) {
     ondragover: (e) => { e.preventDefault(); el.classList.add('over'); }, ondragleave: () => el.classList.remove('over'),
     ondrop: (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove('over'); const n = S.notes.find((x) => x.id === e.dataTransfer.getData('text/plain')); if (n) { n.zone = z.id; save(); renderStage(); } } },
     h('header', {}, h('b', {}, z.label, z.tip && info(z.tip)), z.hint && h('small', {}, z.hint),
-      h('button', { class: 'add', 'aria-label': 'Add sticky note to ' + z.label, onclick: () => { const n = addNote(z.id, '', z.color); draw(); body.querySelector(`[data-id="${n.id}"] textarea`)?.focus(); } }, '+ note')),
+      h('button', { class: 'add', 'aria-label': 'Add sticky note to ' + z.label, onclick: () => { const n = addNote(z.id, '', z.color); draw(); body.querySelector(`[data-id="${n.id}"] textarea`)?.focus(); } }, '+ note'),
+      h('button', { class: 'add pen', title: 'Add a note and write on it by hand', 'aria-label': 'Handwrite a sticky note in ' + z.label, onclick: (e) => { e.stopPropagation(); activeZone = z.id; const n = addNote(z.id, '', z.color); draw(); penPad(n); } }, '✎')),
     body, inner);
   if (activeZone === z.id) el.classList.add('active');
   const draw = () => body.replaceChildren(...S.notes.filter((n) => n.zone === z.id).map((n) => { const s = sticky(n, draw); s.dataset.id = n.id; return s; }));
@@ -490,6 +603,10 @@ function renderStage() {
         h('span', { class: 'score', title: 'Points from games' }, h('i', { 'aria-hidden': 'true' }, '★'), `${total()} pts`),
         !PILOT.hideSignalsArcade && tool('∿', 'Signals', () => dialog('Six signals that there is an opportunity', SIGNALS.map((s) => h('div', { class: 'sig' }, h('b', {}, `${s.n} · ${s.name}`), h('p', {}, 'Listen for: ' + s.listen), h('p', {}, 'Ask: "' + s.ask + '"'))))),
         tool('▤', 'Parking lot', () => dialog('Parking lot', [h('p', { class: 'hint' }, 'Anything important that does not fit the current stage.'), zoneEl({ id: 'parking', label: 'Notes', color: 'white' })])),
+        PROV.storage && tool('⇄', 'Session link', () => { syncNow(); navigator.clipboard?.writeText(sessionUrl()).catch(() => {}); dialog('Continue on another device', [
+          h('p', {}, 'This board and the coach chat are saved on the server. Open this link on the touchscreen, a laptop or after a refresh to carry on where you left off:'),
+          h('input', { readOnly: true, value: sessionUrl(), onfocus: (e) => e.target.select(), 'aria-label': 'Session link' }),
+          h('p', { class: 'hint' }, 'Copied to the clipboard. Use one device at a time: the last change saved wins.')]); }, { title: 'Link to this saved session' }),
         !PILOT.hideSignalsArcade && tool('◫', 'Arcade', () => dialog('Arcade', Object.entries(GAMES).map(([k, g]) => h('button', { class: 'gamecta', onclick: () => openGame(k) }, '🎲 ' + g.title, h('small', {}, S.score[k] != null ? `best: ${S.score[k]} pts` : g.intro))))),
         tool('◌', chatOpen ? 'Hide coach' : 'Coach', () => { chatOpen = !chatOpen; renderStage(); }),
         h('span', { class: 'tsep', 'aria-hidden': 'true' }),
@@ -633,5 +750,5 @@ function openGame(key) {
   next();
 }
 
-function render() { if (home || !FLOWS[S.mode]) return renderSetup(); if (!timer.left) resetTimer(); renderStage(); }
-loadStatus().then(render);
+function render() { markUrl(); if (home || !FLOWS[S.mode]) return renderSetup(); if (!timer.left) resetTimer(); renderStage(); }
+loadStatus().then(loadRemote).then(() => { render(); queueSync(); });
