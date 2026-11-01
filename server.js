@@ -1,7 +1,19 @@
 // Static files + a thin streaming proxy to the coach's model (see providers.js). With no model the app runs in guide mode.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { providers } from './providers.js';
+
+// Load a local .env file if present (KEY=VALUE per line, # for comments) so you can keep
+// ANTHROPIC_API_KEY in a git-ignored file instead of exporting it each time. Real environment wins.
+try {
+  const txt = readFileSync(new URL('./.env', import.meta.url), 'utf8').replace(/^\uFEFF/, '');
+  for (const line of txt.split(/\r?\n/)) {
+    if (/^\s*(#|$)/.test(line)) continue;
+    const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*?)\s*$/);
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+} catch { /* no .env file — use the real environment */ }
 
 const PORT = process.env.PORT || 4173;
 const FILES = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/logic.js': ['logic.js', 'text/javascript'], '/content.js': ['content.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
