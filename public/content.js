@@ -3,6 +3,22 @@
 
 export const COLORS = ['yellow', 'orange', 'green', 'pink', 'purple', 'white'];
 
+// Pilot-session visibility switches. ponytail: hide, don't delete — flip a value back to true/false to re-enable for a future session.
+export const PILOT = {
+  hideWarmup: true,          // warm-up game widgets/steps at the top of each tab
+  hideSignalsArcade: true,   // the "Signals" and "Arcade" buttons in the stage toolbar
+  hideDesignQuestions: true, // the "Design questions for the chosen use case" box in Prioritize
+  hidePrioritize: true,      // the whole Prioritize stage (its use-case voting now lives on the Scenario tab)
+  stepFocusStar: false,      // the ☆ star-to-focus control in the process overview box
+};
+
+// Breakout format shown next to each stage's explanation. Keyed by stage id (deepDive id is 'deep').
+export const BREAKOUT = {
+  today: 'Groups', jobs: 'Groups', dream: 'Groups', scenario: 'Pairs', prioritize: 'Groups', deep: 'Pairs', present: 'Groups',
+  spot: 'Pairs', rethink: 'Pairs',
+  why: 'Plenary', hunt: 'Individual', probe: 'Pairs', card: 'Individual', tell: 'Individual',
+};
+
 export const SIGNALS = [
   { n: 1, name: 'A goal without a how', listen: '"We have to show that…, but nobody says how"', ask: 'Who has decided how you\'ll meet this?' },
   { n: 2, name: 'Lots of measuring, no single answer', listen: '"It depends which report you look at"', ask: 'How many systems does it take to answer this one question?' },
@@ -77,6 +93,22 @@ export const CHALLENGES = [
   { q: 'What would first-time-right mean from the customer\'s perspective?', why: 'Prevents an internally optimised but customer-rejected result.', strong: 'Correct content, references, evidence, format, channel and timing.', flag: '"It posted successfully in the system."' },
 ];
 
+// Reusable design principles the team can select on the Present Back board.
+export const PRINCIPLES = [
+  'Start from the outcome, not today\'s steps',
+  'Automate the standard flow; reserve people for judgement',
+  'Prepare the full case before a person is asked to decide',
+  'Make every AI action explainable and reversible',
+  'Keep a named human accountable for each decision',
+  'Fail safe: block and escalate when confidence is low',
+  'Embed the control in the system, not in a checklist',
+  'Design for the exception, not only the happy path',
+  'Show the one number that proves the value',
+  'Capture feedback so the process keeps improving',
+  'Use data already in the systems before asking people again',
+  'Give the customer one clear, consolidated status',
+];
+
 const deepDive = {
   id: 'deep', title: 'Deep Dive & Prototype', mins: 20,
   objective: 'Bring the selected scenario to life: define how it works, who it serves and the value it creates. Then build a tangible prototype you can explore, test and refine.',
@@ -88,14 +120,14 @@ const deepDive = {
   ask: ['Who touches this first on a normal day, and what do they type or click?', 'Which data must exist before this works at all?', 'What is the one screen that proves the value?'],
   ideas: ['Start with one user and one happy path', 'Show the exception queue: where does a person step in?', 'Put the one number that matters on the first screen'],
   widgets: [
-    { type: 'fields', title: 'Solution canvas', fields: [
-      { id: 'usecase', label: 'Use case', ph: 'We want to design a solution for…' },
-      { id: 'context', label: 'Process context', ph: 'This improves the following part of the process…' },
-      { id: 'outcome', label: 'Outcome', ph: 'The goal is to… Success looks like…' },
-      { id: 'user', label: 'User', ph: 'The primary user is… They interact by: input → system action → output' },
-      { id: 'value', label: 'Value', ph: 'This creates value by…' },
-      { id: 'tech', label: 'Tech stack', ph: 'Integration (if relevant)' },
-      { id: 'data', label: 'Data requirements', ph: 'Input data · Output data · Source (if known)' },
+    { type: 'promptcanvas', title: 'Build your solution prompt', intro: 'You are writing one prompt. The structure is already here — fill the blanks in your own words, then assemble it into a full prompt you can use to build.', fields: [
+      { id: 'usecase', label: 'Use case', lead: 'Build a working prototype for', ph: 'e.g. capturing and standardising incoming order changes' },
+      { id: 'context', label: 'Process context', lead: 'It improves this part of the process', ph: 'e.g. the order-change intake, before fulfilment' },
+      { id: 'outcome', label: 'Outcome', lead: 'The goal is to', ph: 'e.g. …; success looks like changes handled first-time-right' },
+      { id: 'user', label: 'User', lead: 'The primary user is', ph: 'e.g. an order-desk agent. They: input → system action → output' },
+      { id: 'value', label: 'Value', lead: 'This creates value by', ph: 'e.g. removing manual re-keying and catching errors early' },
+      { id: 'tech', label: 'Tech stack', lead: 'Integration (if relevant)', ph: 'e.g. reads from the ERP; otherwise standalone' },
+      { id: 'data', label: 'Data requirements', lead: 'Data', ph: 'input data · output data · source (if known)' },
     ] },
     { type: 'prototype' },
   ],
@@ -106,22 +138,22 @@ const full = [
     id: 'today', title: "Today's Reality", mins: 30,
     objective: 'Build a shared understanding of the current process by exploring its key activities, decision points, stakeholders and friction points. Use these insights as the foundation to reimagine a better, smarter way of working.',
     steps: [
-      { t: 'Understand the process', mins: 5, d: 'Review the steps and align on how it works today. Rename, add or remove steps until it is right.' },
-      { t: 'Capture context and friction', mins: 15, d: 'Note context, constraints and dependencies. Then mark where time, effort, information or quality is lost.' },
-      { t: 'Choose the focus', mins: 10, d: 'Pick the step or challenge with the greatest opportunity. It becomes the focus of the next exercises.' },
+      { t: 'Understand the process', mins: 15, bk: 'Groups', d: 'Review the process together and align on how it works today. Ensure everyone has a shared understanding before moving on.' },
+      { t: 'Capture context and identify friction points', mins: 15, bk: 'Groups', d: 'Identify any important context, constraints, assumptions or dependencies that influence the process today. Then discuss where time, effort, information or quality is lost, and capture the most important friction points on the board. Agree on the process step or challenge that offers the greatest opportunity for improvement — this becomes the focus for the next exercises.' },
     ],
     ask: ['What exactly triggers this process, and who can declare it ready?', 'What share of work is standard flow versus exception handling?', 'Which exceptions start here, and which arrive from upstream?', 'Which fields or documents are most often missing or inconsistent?', 'Which approvals are legally or financially required, and which exist out of habit?', 'Does the system hold the real logic, or do teams rely on extra files, inboxes and knowledge?'],
     ideas: ['We learn about changes too late', 'Manual re-keying between systems', 'One person holds the knowledge', 'Nobody monitors the control that exists'],
     widgets: [
       { type: 'game', game: 'signals', label: 'Warm-up: Signal Hunt' },
       { type: 'brief' },
-      { type: 'process', title: 'Process overview and friction mapping' },
-      { type: 'fields', title: 'Important context', cols: true, fields: [
-        { id: 'scope', label: 'Process scope', ph: 'What is in / out of scope?' },
-        { id: 'start', label: 'Start trigger', ph: 'What starts the process?' },
-        { id: 'end', label: 'End trigger', ph: 'When is it done?' },
-        { id: 'systems', label: 'Systems involved', ph: 'e.g. ERP, CRM, ticketing' },
-        { id: 'stakeholders', label: 'Stakeholders', ph: 'Who touches it?' },
+      { type: 'process', title: 'Process overview and friction mapping', tip: 'Walk the steps as they really happen today. Under each step, note the friction — where time, effort, information or quality is lost.' },
+      { type: 'fields', title: 'Important context', tip: 'The facts that frame the process: what it covers, what starts and ends it, which systems and people are involved.', cols: true, fields: [
+        { id: 'scope', label: 'Process scope', ph: 'What is in / out of scope?', tip: 'Where this process begins and ends, and what is deliberately left out of it.' },
+        { id: 'start', label: 'Start trigger', ph: 'What starts the process?', tip: 'The event that kicks it off — a request, an order, a date, a message.' },
+        { id: 'end', label: 'End trigger', ph: 'When is it done?', tip: 'The point at which the outcome is delivered and the process is complete.' },
+        { id: 'systems', label: 'Systems involved', ph: 'e.g. ERP, CRM, ticketing', tip: 'The tools and data sources people rely on to do the work today.' },
+        { id: 'stakeholders', label: 'Stakeholders', ph: 'Who touches it?', tip: 'Everyone who performs, approves, depends on or is affected by the process.' },
+        { id: 'other', label: 'Other', ph: 'Anything important that does not fit above', tip: 'Anything else that matters — regulations, risks, exceptions, deadlines or dependencies that do not fit scope, trigger, systems or stakeholders.' },
       ] },
     ],
   },
@@ -129,19 +161,19 @@ const full = [
     id: 'jobs', title: 'Current State · Jobs-to-be-Done', mins: 30,
     objective: 'Identify the most important drivers for change and the key jobs-to-be-done. Explore what needs to be achieved, whether it is best suited for humans, AI or both, and why it matters for better outcomes.',
     steps: [
-      { t: 'Identify the jobs', mins: 5, d: 'For your focus step: what needs to be achieved for a successful outcome? Focus on what, not how it is done today.' },
-      { t: 'Cluster', mins: 5, d: 'Merge duplicates and name the themes.' },
-      { t: 'Prioritise', mins: 5, d: 'Keep the jobs that would create the greatest value if they were fulfilled more effectively.' },
-      { t: 'Human, AI or both?', mins: 15, d: 'Decide who should do each job and explain why. Consider the strengths each brings.' },
+      { t: 'Identify the Jobs-to-be-Done', mins: 5, bk: 'Individual', d: 'Reflect on the selected process challenge and identify the most important jobs that need to be accomplished to achieve a successful outcome. Focus on what needs to be achieved, not how it is done today. Capture your ideas on sticky notes.' },
+      { t: 'Share and Cluster', mins: 5, bk: 'Pairs', d: 'Share your ideas with a partner and discuss similarities, differences and emerging themes. Together, identify the jobs-to-be-done that are most critical to success.' },
+      { t: 'Prioritize as a Group', mins: 5, bk: 'Groups', d: 'Review the identified jobs-to-be-done and agree on the most important ones. Focus on the jobs that would create the greatest value if they could be fulfilled more effectively.' },
+      { t: 'Human, AI, or Both?', mins: 15, bk: 'Pairs', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, AI, or both. Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
     ],
     ask: ['What are we actually trying to achieve here, regardless of today\'s tools?', 'Is this job judgement, or is it gathering and comparing?', 'What would a person still decide if everything were prepared for them?'],
     ideas: ['First time right at entry', 'Predict peaks to plan capacity', 'Clear governance on who may change what', 'Deliver on time'],
     widgets: [
       { type: 'game', game: 'sorter', label: 'Warm-up: Judgement or legwork?' },
-      { type: 'rows', id: 'jtbd', title: 'Jobs-to-be-done', min: 4, cols: [
-        { id: 'job', label: 'What are we trying to achieve?', type: 'text' },
-        { id: 'who', label: 'Who should do the work?', type: 'who' },
-        { id: 'why', label: 'Why?', type: 'text' },
+      { type: 'rows', id: 'jtbd', title: 'Jobs-to-be-done', tip: 'A job-to-be-done is what must be achieved for a good outcome, described independently of today\'s tools or steps.', min: 4, cols: [
+        { id: 'job', label: 'What are we trying to achieve?', type: 'text', tip: 'The result that matters, stated as an outcome — not the activity or the current way of doing it.' },
+        { id: 'who', label: 'Who should do the work?', type: 'who', tip: 'Human for judgement and relationships; AI for gathering, comparing and drafting; Both when AI prepares and a person decides.' },
+        { id: 'why', label: 'Why?', type: 'text', tip: 'Why that split is right — the strength each side brings to this job.' },
       ] },
       { type: 'challenges' },
     ],
@@ -150,30 +182,31 @@ const full = [
     id: 'dream', title: 'Dream State · Reimagine the Process', mins: 20,
     objective: 'Imagine a dream state where the most important jobs-to-be-done are fulfilled seamlessly. Define what success looks like and the value it could create at each level.',
     steps: [
-      { t: 'Imagine the ideal future', mins: 3, d: 'Forget today\'s constraints, systems and ways of working. "How amazing would it be if…"' },
-      { t: 'Build on it', mins: 5, d: 'Read your notes back. Which elements are most compelling? Push them one step further.' },
-      { t: 'Define the dream state', mins: 12, d: 'Place each idea at the level where the value lands: the team, the organisation, the customer.' },
+      { t: 'Imagine the Ideal Future', mins: 3, bk: 'Individual', d: 'Forget today\'s constraints, systems and ways of working. Imagine a dream state where the most important jobs-to-be-done are fulfilled seamlessly. "How amazing would it be if…"' },
+      { t: 'Share and Build', mins: 5, bk: 'Pairs', d: 'Share your ideas with a partner and build on each other\'s thinking. Which elements are most compelling? Push them one step further.' },
+      { t: 'Define the Dream State', mins: 12, bk: 'Groups', d: 'As a group, define what success looks like and the value it could create at each level. Place each idea at the level where the value lands: the team, the organisation, the customer.' },
     ],
     ask: ['How amazing would it be if…?', 'What would the customer notice first?', 'What would your team stop doing entirely?'],
     ideas: ['First time right means less work', 'The customer receives exactly what they ordered', 'Fewer changes downstream, more compliance', 'Trust: we are a reliable partner'],
-    widgets: [{ type: 'notes', title: 'How amazing would it be if…', layout: 'arcs', zones: [
-      { id: 'dream_ext', label: 'External customer level' },
-      { id: 'dream_org', label: 'Organisation & internal customer level' },
-      { id: 'dream_ops', label: 'Operations team level' },
+    widgets: [{ type: 'notes', title: 'How amazing would it be if…', layout: 'arcs', tip: 'Place each idea where the value lands. The rings adapt to your process: the inner ring is your own team, the outer ring is the people you ultimately serve.', zones: [
+      { id: 'dream_ext', label: 'External / stakeholder client' },
+      { id: 'dream_org', label: 'Internal / direct client' },
+      { id: 'dream_ops', label: 'Internal' },
     ] }],
   },
   {
     id: 'scenario', title: 'Reimagined AI-Powered Scenario', mins: 30,
-    objective: 'Turn your jobs and dream state into one AI-powered scenario, then make it your own before taking it into prototyping.',
+    objective: 'Turn your jobs and dream state into AI-powered scenarios, reflect on them as a group, vote on the opportunities that matter most, and select the scenario to take into prototyping.',
     steps: [
-      { t: 'Draft and read the scenario', mins: 3, d: 'Generate the scenario from your board and read it in silence.' },
-      { t: 'Reflect', mins: 7, d: 'How well does it support your future vision, the value it creates and its potential impact?' },
-      { t: 'Refine the scenario', mins: 20, d: 'Explore dependencies, customer communication, exceptions, process impact, risks and feedback loops.' },
+      { t: 'Review and Reflect on the Reimagined Scenarios', mins: 20, bk: 'Groups', d: 'Generate the scenario from your board and read it together. Reflect as a group on how well it supports your future vision, the value it creates and its potential impact. Explore dependencies, customer communication, exceptions, process impact, risks and feedback loops.' },
+      { t: 'Prioritize Opportunities', mins: 2, bk: 'Individual', d: 'You have 2 votes. Vote for the use cases that create the greatest value, best support the vision and can significantly improve the process.' },
+      { t: 'Select a Scenario', mins: 8, bk: 'Groups', d: 'Review the most-voted opportunities as a group and select the scenario to move forward into prototyping. Make it your own before taking it further.' },
     ],
     ask: ['What must be true upstream for this flow to start cleanly?', 'What happens when the agent is not confident?', 'Who is told what, and when?'],
     ideas: ['Master data must be accessible and current', 'Policy violations are blocked and escalated', 'Reviewer edits improve the rules over time', 'Customer gets one consolidated status update'],
     widgets: [
       { type: 'scenario' },
+      { type: 'vote' },
       { type: 'notes', title: 'Make it your own', zones: [
         { id: 'r_dep', label: 'Dependencies & assumptions' }, { id: 'r_comm', label: 'Customer communication' },
         { id: 'r_exc', label: 'Exception handling' }, { id: 'r_imp', label: 'Process impact' },
@@ -218,10 +251,10 @@ const full = [
     ideas: ['Roles and responsibilities: who is accountable?', 'We embed controls in the system', 'All the data is there; now we can get the insights', 'First step: prepare the knowledge base, policies and metrics'],
     widgets: [
       { type: 'notes', title: 'Report-out', zones: [
-        { id: 'p_challenge', label: '1. The Challenge', hint: 'The biggest friction we wanted to solve was…', color: 'yellow' },
-        { id: 'p_principles', label: '2. Design Principles', hint: 'What choices did we make when redesigning the process?', color: 'orange' },
-        { id: 'p_process', label: '3. Our Reimagined Process', hint: 'In our future state, stakeholders can… AI helps by…', color: 'green' },
-        { id: 'p_insights', label: '4. Insights and Next Steps', hint: 'This taught us… We would recommend… The first step should be…', color: 'pink' },
+        { id: 'p_challenge', label: '1. The Challenge', hint: 'The biggest friction we wanted to solve was…', color: 'yellow', tip: 'The single biggest friction or problem you set out to solve.' },
+        { id: 'p_principles', label: '2. Design Principles', hint: 'What choices did we make when redesigning the process?', color: 'orange', tip: 'The rules you chose when redesigning — the trade-offs and non-negotiables. Pick from the common list below or add your own.' },
+        { id: 'p_process', label: '3. Our Reimagined Process', hint: 'In our future state, stakeholders can… AI helps by…', color: 'green', tip: 'Your future-state flow and where AI helps. Auto-extracted from your scenario, jobs and dream state — edit as needed.' },
+        { id: 'p_insights', label: '4. Insights and Next Steps', hint: 'This taught us… We would recommend… The first step should be…', color: 'pink', tip: 'What you learned, what you would recommend, and the first concrete step to take.' },
       ] },
       { type: 'summary' },
     ],
@@ -404,9 +437,9 @@ const spot = [
 ];
 
 export const FLOWS = {
-  full: { tag: 'Full exercise', name: 'Full Reimagination', sub: 'Seven stages, about 2¾ hours. From today\'s reality to a working prototype and report-out.', stages: full },
-  quick: { tag: 'Simplified', name: 'Quick Spot & Rethink', sub: 'Three stages, under an hour. Two rounds from the group template, then a prototype.', stages: quick },
-  spot: { tag: 'Game', name: 'SPOT Lab', sub: 'Five rounds, 90 minutes. Play S-P-O-T on a client case: hunt signals, probe without pitching, write a Spot card, tell.', stages: spot },
+  full: { tag: 'Full exercise', name: 'Full Reimagination', sub: 'Seven stages. From today\'s reality to a working prototype and report-out.', stages: full },
+  quick: { tag: 'Simplified', name: 'Quick Spot & Rethink', sub: 'Three stages. Two rounds from the group template, then a prototype.', stages: quick },
+  spot: { tag: 'Game', name: 'SPOT Lab', sub: 'Five rounds. Play S-P-O-T on a client case: hunt signals, probe without pitching, write a Spot card, tell.', stages: spot },
 };
 
 export const GAMES = {

@@ -1,4 +1,5 @@
 // Pure logic (no DOM) so it runs in the browser and in `node --test`.
+import { PILOT } from './content.js';
 
 const PITCH = /\b(a\.?i\.?|artificial intelligence|agents?|agentic|llms?|gpt|chatgpt|copilot|claude|gemini|machine learning|rpa|bots?|chatbots?)\b/i;
 export const isPitch = (t) => PITCH.test(t || '');
@@ -45,6 +46,56 @@ export function buildScenario(S) {
   };
 }
 
+// Ready-made reimagined scenarios, always relevant to the chosen process. Three patterns applied to the current steps.
+export function scenarioPresets(S) {
+  const names = (S.steps.length ? S.steps : [{ name: 'Intake' }, { name: 'Process' }, { name: 'Review' }, { name: 'Deliver' }]).map((s) => s.name);
+  const base = S.caseName || focusName(S);
+  const friction = zonesLike(S, 'fr:'), dream = zonesLike(S, 'dream_');
+  const opp = friction.slice(0, 3).join(' · '), val = dream.slice(0, 3).join(' · ');
+  const mid = names.slice(0, 5), s28 = (t) => short(t, 28), s16 = (t) => short(t, 16);
+  const trigger = { name: 'Trigger', does: `A new ${base.toLowerCase()} case arrives`, agent: 'Intake agent', human: null };
+  const finish = { name: 'Finish', does: 'Outcome confirmed, audit trail stored', agent: null, human: null };
+  return [
+    {
+      title: `${base}: agents prepare, people decide`,
+      tagline: dream[0] || 'AI assembles every case; people judge the exceptions.',
+      steps: [trigger, ...mid.map((n, i) => ({ name: s28(n), does: `AI prepares "${short(n, 24)}" and flags anything unclear.`, agent: `${s16(n)} agent`, human: i === Math.floor(mid.length / 2) ? 'Reviews and decides' : null })), finish],
+      opportunity: opp || 'Agents remove the manual preparation that slows every step.',
+      value: val || 'Faster cases, fewer errors, people focused on judgement.',
+    },
+    {
+      title: `${base}: touchless standard flow`,
+      tagline: 'The standard path runs end-to-end; people handle only exceptions.',
+      steps: [trigger, ...mid.map((n) => ({ name: s28(n), does: 'Handled automatically when the case is standard.', agent: `${s16(n)} agent`, human: null })), { name: 'Exceptions', does: 'Non-standard cases are routed to the right expert with the full context.', agent: 'Triage agent', human: 'Resolves exceptions' }, finish],
+      opportunity: opp || 'Most cases are standard and never need a person.',
+      value: val || 'Throughput rises without more headcount; experts spend time where it counts.',
+    },
+    {
+      title: `${base}: monitor and prevent`,
+      tagline: 'Continuous checks catch problems upstream, before they cost time.',
+      steps: [{ name: 'Watch', does: 'An agent monitors inputs and upstream changes continuously.', agent: 'Monitoring agent', human: null }, ...mid.slice(0, 4).map((n) => ({ name: s28(n), does: 'Checked in real time; drift and gaps are flagged early.', agent: `${s16(n)} check`, human: null })), { name: 'Control tower', does: 'A person sees one prioritised view and steps in where needed.', agent: null, human: 'Steers from one view' }, finish],
+      opportunity: opp || 'Problems are found late today; monitoring moves them upstream.',
+      value: val || 'Fewer surprises, steadier flow, a clear real-time picture.',
+    },
+  ];
+}
+
+// Short bullet list of the reimagined process, extracted from the scenario (or jobs / dream as a fallback).
+export function reimaginedSummary(S) {
+  const out = [];
+  if (S.scenario) {
+    for (const s of S.scenario.steps) {
+      if (/^(trigger|finish)$/i.test(s.name)) continue;
+      out.push(`${s.name}${s.agent ? ` — AI: ${s.agent}` : ''}${s.human ? ` — human: ${s.human}` : ''}`);
+    }
+  } else {
+    const jobs = (S.rows.jtbd || []).filter((r) => (r.job || '').trim());
+    for (const j of jobs.slice(0, 5)) out.push(`${j.job.trim()}${j.who === 'ai' ? ' — AI' : j.who === 'human' ? ' — human' : ' — human + AI'}`);
+  }
+  if (!out.length) out.push(...zonesLike(S, 'dream_').slice(0, 4));
+  return out.slice(0, 7);
+}
+
 export function parseScenario(text) {
   try {
     const o = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
@@ -59,11 +110,12 @@ export function snapshot(S, flow) {
   if (S.brief) out.push('Case brief: ' + S.brief);
   if (S.steps.length) out.push('Process steps: ' + S.steps.map((s) => s.name).join(' → '));
   for (const st of flow.stages) for (const w of st.widgets) {
-    if (w.type === 'fields') for (const f of w.fields) if ((S.f[f.id] || '').trim()) out.push(`${f.label}: ${S.f[f.id].trim()}`);
+    if (w.type === 'fields' || w.type === 'promptcanvas') for (const f of w.fields) if ((S.f[f.id] || '').trim()) out.push(`${f.label}: ${S.f[f.id].trim()}`);
     if (w.type === 'rows') for (const r of S.rows[w.id] || []) { const v = w.cols.map((c) => r[c.id]).filter(Boolean); if (v.length > 1 || (v[0] && v[0] !== 'both')) out.push(`${w.title}: ${w.cols.map((c) => `${c.label}=${r[c.id] || '-'}`).join(' | ')}`); }
     if (w.type === 'notes') for (const z of w.zones) { const n = zone(S, z.id); if (n.length) out.push(`${z.label}: ${n.join(' · ')}`); }
   }
   for (const s of S.steps) { const n = zone(S, 'fr:' + s.id); if (n.length) out.push(`Friction at "${s.name}": ${n.join(' · ')}`); }
+  for (const s of S.steps) if ((s.context || '').trim()) out.push(`Context for "${s.name}": ${s.context.trim()}`);
   const uc = S.notes.filter((n) => n.zone === 'usecases' && n.text.trim()).map((n) => `${n.text.trim()} (${S.votes[n.id] || 0} votes)`);
   if (uc.length) out.push('Use cases: ' + uc.join(' · '));
   if (S.scenario) out.push(`Scenario "${S.scenario.title}": ` + S.scenario.steps.map((s) => s.name).join(' → '));
@@ -85,10 +137,10 @@ ${snapshot(S, flow)}`;
 export function nudges(stage, S) {
   const out = [];
   for (const w of stage.widgets) {
-    if (w.type === 'fields') { const e = w.fields.filter((f) => !(S.f[f.id] || '').trim()); if (e.length) out.push(`"${e[0].label}" is still blank${e.length > 1 ? ` (and ${e.length - 1} more)` : ''}.`); for (const f of w.fields) if (f.lint && isPitch(S.f[f.id])) out.push(`Yellow card: "${f.label}" mentions AI or a tool. Ask about their work instead.`); }
+    if (w.type === 'fields' || w.type === 'promptcanvas') { const e = w.fields.filter((f) => !(S.f[f.id] || '').trim()); if (e.length) out.push(`"${e[0].label}" is still blank${e.length > 1 ? ` (and ${e.length - 1} more)` : ''}.`); for (const f of w.fields) if (f.lint && isPitch(S.f[f.id])) out.push(`Yellow card: "${f.label}" mentions AI or a tool. Ask about their work instead.`); }
     if (w.type === 'rows') { const n = (S.rows[w.id] || []).filter((r) => (r[w.cols[0].id] || '').trim()).length; if (n < 2) out.push(`"${w.title}" has ${n} filled row${n === 1 ? '' : 's'}. Aim for at least 3.`); }
     if (w.type === 'notes') { const e = w.zones.filter((z) => !zone(S, z.id).length); if (e.length) out.push(`No notes yet under "${e[0].label}"${e.length > 1 ? ` (and ${e.length - 1} more areas)` : ''}.`); }
-    if (w.type === 'process') { if (!zonesLike(S, 'fr:').length) out.push('No friction points yet. Where is time, effort or quality lost?'); if (!S.focus) out.push('Pick a focus step: tap the star on the step with the most opportunity.'); }
+    if (w.type === 'process') { if (!zonesLike(S, 'fr:').length) out.push('No friction points yet. Where is time, effort or quality lost?'); if (PILOT.stepFocusStar && !S.focus) out.push('Pick a focus step: tap the star on the step with the most opportunity.'); }
     if (w.type === 'evidence' && S.score.hunt == null) out.push('Tag the evidence cards, then check your round.');
     if (w.type === 'spotbar') { const m = strongSpot(S).filter((x) => !x[1]).map((x) => x[0].toLowerCase()); if (m.length) out.push('The Spot card still needs: ' + m.join(', ') + '.'); }
     if (w.type === 'vote' && !Object.values(S.votes).some(Boolean)) out.push('You still have 2 votes to place.');
@@ -112,8 +164,8 @@ export function summaryMd(S, flow) {
   for (const st of flow.stages) {
     const body = [];
     for (const w of st.widgets) {
-      if (w.type === 'process') for (const s of S.steps) body.push(`- **${s.name}**${s.id === S.focus ? ' (focus)' : ''}${zone(S, 'fr:' + s.id).map((n) => `\n  - ${n}`).join('')}`);
-      if (w.type === 'fields') for (const f of w.fields) if ((S.f[f.id] || '').trim()) body.push(`- **${f.label}** ${S.f[f.id].trim().replace(/\n/g, ' / ')}`);
+      if (w.type === 'process') for (const s of S.steps) body.push(`- **${s.name}**${s.id === S.focus ? ' (focus)' : ''}${(s.context || '').trim() ? `\n  - _context:_ ${s.context.trim().replace(/\n/g, ' ')}` : ''}${zone(S, 'fr:' + s.id).map((n) => `\n  - ${n}`).join('')}`);
+    if (w.type === 'fields' || w.type === 'promptcanvas') for (const f of w.fields) if ((S.f[f.id] || '').trim()) body.push(`- **${f.label}** ${S.f[f.id].trim().replace(/\n/g, ' / ')}`);
       if (w.type === 'rows') for (const r of S.rows[w.id] || []) if ((r[w.cols[0].id] || '').trim()) body.push('- ' + w.cols.map((c) => r[c.id]).filter(Boolean).join(' — '));
       if (w.type === 'notes') for (const z of w.zones) { const n = zone(S, z.id); if (n.length) body.push(`- **${z.label}**${n.map((x) => `\n  - ${x}`).join('')}`); }
       if (w.type === 'vote') for (const n of S.notes.filter((x) => x.zone === 'usecases' && x.text.trim())) body.push(`- ${n.text.trim()} ${'★'.repeat(S.votes[n.id] || 0)}`);
@@ -192,6 +244,104 @@ Prototype config: ${JSON.stringify(protoConfig(S))}${change ? `\n\nRequested cha
 export const scenarioPrompt = (S, flow) => `From the board below, write one reimagined AI-powered scenario for the focus step. Reply with only JSON: {"title": string, "tagline": string, "steps": [{"name": short orchestration step, "does": one sentence, "agent": agent name or null, "human": what a person does here or null}], "opportunity": 1-2 sentences, "value": 1-2 sentences}. 5 to 7 steps, starting with a trigger and ending with a finish state. Use only facts from the board; do not invent numbers.
 
 ${snapshot(S, flow)}`;
+
+// Markdown prompt to paste into Replit AI. mode 'template' fills it from the Solution prompt canvas and scenario; 'blank' is an empty skeleton.
+export function replitPrompt(S, flow, mode) {
+  if (mode === 'blank') {
+    return `# Replit build prompt
+
+Build a small, clickable web app prototype.
+
+## What to build
+- App name:
+- Primary user:
+- The one outcome it must deliver:
+- The main screen the user sees:
+- What AI / agents do in the background:
+- Where a human steps in to decide:
+- The one number that proves the value:
+
+## Requirements
+- Single-page web app, realistic sample data, usable at 900px wide.
+- Keep it simple: one happy path plus one exception path.
+- No login and no external services; mock everything.
+
+## Notes
+-
+`;
+  }
+  const cfg = protoConfig(S);
+  const steps = cfg.steps.map((s, i) => `${i + 1}. **${s.name}**${s.agent ? ` — AI agent: ${s.agent}` : ''}${s.human ? ' — human decides / handles exceptions' : ''}`).join('\n') || '1. Intake\n2. Process\n3. Review\n4. Deliver';
+  return `# Replit build prompt — ${cfg.title}
+
+Build a working, clickable **web app prototype** for the use case below as one self-contained single-page app (HTML/CSS/JS is fine). Use realistic sample data, usable at 900px wide. Keep it simple and realistic as a first prototype.
+
+## Use case
+${cfg.title}
+
+## Primary user
+${cfg.user}
+
+## Outcome / what success looks like
+${cfg.outcome}
+
+## Why it matters (value)
+${cfg.value}
+
+## The flow to show (process steps)
+${steps}
+
+## On screen
+- The primary user's main screen.
+- What the AI / agents prepare automatically.
+- Where a person steps in to decide or handle exceptions.
+- The one number that proves the value, shown prominently.
+${cfg.data ? `\n## Data\n${cfg.data}\n` : ''}${(S.f.tech || '').trim() ? `\n## Tech / integration\n${S.f.tech.trim()}\n` : ''}
+## Build notes
+- One happy path and one exception path.
+- No real credentials or external calls; mock everything.
+`;
+}
+
+// Sensible per-field defaults for the Solution prompt canvas, derived from the chosen focus, scenario and process,
+// so the prompt pre-fills into a richer starting point the participant can edit.
+export function promptDefaults(S) {
+  const sc = S.scenario || buildScenario(S);
+  const focus = focusName(S), proc = S.caseName || focus;
+  return {
+    usecase: sc.title,
+    context: `the ${focus} step of ${proc}`,
+    outcome: sc.tagline,
+    user: `the specialist who owns ${focus}`,
+    value: sc.value,
+    tech: (S.f.systems || S.f.q_systems || '').trim(),
+    data: '',
+  };
+}
+
+// Assemble the Solution prompt canvas fields into one structured, developed build prompt the participant can read, copy or hand to AI.
+// Empty fields fall back to defaults derived from the process, so the prompt is useful from the start.
+export function solutionPrompt(S) {
+  const f = S.f, d = promptDefaults(S);
+  const v = (id) => (((f[id] || '').trim() || d[id] || '')).replace(/\s*\n+\s*/g, ' ').trim();
+  const usecase = v('usecase'), context = v('context'), outcome = v('outcome');
+  const user = v('user'), value = v('value'), tech = v('tech'), data = v('data');
+  if (!usecase && !context && !outcome) return '';
+  const sc = S.scenario || buildScenario(S);
+  const steps = (sc.steps || []).map((s, i) => `${i + 1}. ${s.name}${s.agent ? ` — AI agent: ${s.agent}` : ''}${s.human ? ' — human reviews / handles exceptions' : ''}`).join('\n');
+  let n = 0; const P = [];
+  const sec = (title, body) => body && P.push(`## ${++n}. ${title}\n${body}`);
+  P.push('Build a working, clickable web-app prototype as one self-contained single-page app. Use realistic sample data, keep it to one happy path plus one exception path, and only use the information provided below — do not invent requirements.');
+  sec('Use case', usecase);
+  sec('Process context', context && `This improves ${context}.`);
+  sec('Outcome / what success looks like', outcome);
+  sec('Primary user & interaction', user && `${user} uses the main screen to get the job done.`);
+  sec('Why it matters (value)', value);
+  sec('Process flow', steps);
+  sec('Data & integration', [tech && `Integration: ${tech}`, data && `Data: ${data}`].filter(Boolean).join('\n'));
+  sec('Build instructions', '- Single-page web app, usable at 900px wide.\n- Show what the AI / agents prepare automatically and where a person steps in to decide or handle exceptions.\n- Show the one number that proves the value prominently.\n- No login or external services; mock everything.');
+  return P.join('\n\n');
+}
 
 /* ---------- SPOT Lab ---------- */
 export const huntCard = (picked, answer) => (answer.length ? scoreSignals(picked, answer) : picked.length ? 0 : 1);

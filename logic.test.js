@@ -47,6 +47,20 @@ test('scenario, prototype and summary are built from the board', () => {
   assert.ok(L.coachReply(FLOWS.full.stages[0], s, 'suggest sticky notes').includes('- '));
 });
 
+test('solutionPrompt builds a structured prompt and pre-fills from defaults', () => {
+  const s = S();
+  // No canvas fields filled: defaults derived from the process still produce a usable, sectioned prompt.
+  const auto = L.solutionPrompt(s);
+  assert.match(auto, /## 1\. Use case/);
+  assert.match(auto, /## \d+\. Build instructions/);
+  assert.match(auto, /do not invent requirements/);
+  const d = L.promptDefaults(s);
+  assert.ok(d.usecase && d.outcome);
+  // Explicit field overrides the default and is sectioned, not concatenated.
+  s.f.usecase = 'Standardise incoming order changes';
+  assert.match(L.solutionPrompt(s), /## 1\. Use case\nStandardise incoming order changes/);
+});
+
 test('model output parsing is defensive', () => {
   assert.equal(L.parseScenario('sorry'), null);
   assert.equal(L.parseScenario('```json\n{"title":"T","steps":[{"name":"A"}]}\n```').steps[0].name, 'A');
