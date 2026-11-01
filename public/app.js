@@ -2,7 +2,7 @@ import { FLOWS, CASES, SIGNALS, GAMES, COLORS, CHALLENGES, PRINCIPLES, PILOT, BR
 import * as L from './logic.js';
 
 const KEY = 'reimagine-v2', CKEY = 'reimagine-cases', AKEY = 'reimagine-ai';
-const blank = () => ({ mode: null, name: '', caseName: '', caseId: null, brief: '', quotes: [], probe: null, ev: {}, stage: 0, f: {}, notes: [], rows: {}, steps: [], focus: null, votes: {}, scenario: null, proto: '', chat: [], score: {} });
+const blank = () => ({ mode: null, name: '', caseName: '', caseId: null, brief: '', quotes: [], probe: null, ev: {}, stage: 0, f: {}, notes: [], rows: {}, steps: [], focus: null, votes: {}, svotes: {}, scenario: null, proto: '', chat: [], score: {} });
 let S = blank();
 try { S = { ...S, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { /* corrupt or unavailable storage: start fresh */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode */ } };
@@ -156,8 +156,8 @@ function renderSetup() {
     S = { ...blank(), mode, name: name.value.trim() }; applyCase(cur()); render();
   };
   draw();
-  $('app').replaceChildren(h('div', { class: 'setup glass' },
-    h('div', { class: 'brand' }, 'EY.ai Lab'),
+  $('app').replaceChildren(h('div', { class: 'setup card' },
+    h('div', { class: 'brandrow' }, h('span', { class: 'eylogo', 'aria-hidden': 'true' }, 'EY'), h('b', {}, 'EY.ai Lab')),
     h('h1', {}, 'Process Reimagination'),
     h('p', { class: 'lead' }, 'A self-guided session: map today\'s reality, reimagine the process with people and AI side by side, and leave with a working prototype. A coach is with you all the way.'),
     FLOWS[S.mode] && h('div', { class: 'resume' }, h('span', {}, `Session in progress: ${flow().name} · ${S.caseName}`), h('button', { class: 'primary', onclick: () => { home = false; render(); } }, 'Continue →')),
@@ -183,7 +183,7 @@ function sticky(n, redraw) {
 function addNote(zoneId, text = '', color = 'yellow') { const n = { id: uid(), zone: zoneId, text, color }; S.notes.push(n); save(); return n; }
 function zoneEl(z, inner) {
   const body = h('div', { class: 'znotes' });
-  const el = h('section', { class: 'zone', 'data-zone': z.id,
+  const el = h('section', { class: 'zone', 'data-zone': z.id, 'data-color': z.color || null,
     onclick: () => { activeZone = z.id; document.querySelectorAll('.zone.active').forEach((x) => x.classList.remove('active')); el.classList.add('active'); },
     ondragover: (e) => { e.preventDefault(); el.classList.add('over'); }, ondragleave: () => el.classList.remove('over'),
     ondrop: (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove('over'); const n = S.notes.find((x) => x.id === e.dataTransfer.getData('text/plain')); if (n) { n.zone = z.id; save(); renderStage(); } } },
@@ -346,30 +346,45 @@ const W = {
     const status = h('span', { class: 'hint', role: 'status' });
     const bar = h('div', { class: 'bar' }, AI && h('button', { class: 'primary', onclick: () => gen(true) }, S.scenario ? 'Regenerate with AI' : 'Generate with AI'), h('button', { class: AI ? 'add' : 'primary', onclick: () => gen(false) }, S.scenario ? 'Redraft from my board' : 'Draft from my board'), status);
     const sc = S.scenario;
+    const sv = (S.svotes ||= {});
+    const star = (title) => h('button', { class: 'sstar' + (sv[title] ? ' on' : ''), 'aria-pressed': String(!!sv[title]), title: 'Vote for this scenario', onclick: (e) => { e.stopPropagation(); sv[title] = sv[title] ? 0 : 1; save(); renderStage(); } },
+      h('span', { 'aria-hidden': 'true' }, sv[title] ? '★' : '☆'), sv[title] ? 'Voted' : 'Vote');
     if (!sc) {
       const presets = L.scenarioPresets(S);
       box.append(h('h3', {}, 'Your reimagined scenario'), h('p', { class: 'hint' }, 'Start from a ready-made pattern for this process, or draft one from your board.'),
-        h('div', { class: 'scards' }, presets.map((p) => h('button', { class: 'scard', onclick: () => { S.scenario = p; save(); toast('Loaded a scenario you can now edit or redraft.'); renderStage(); } },
-          h('b', {}, p.title), h('span', {}, p.tagline)))),
+        h('div', { class: 'scards' }, presets.map((p) => h('div', { class: 'scard' + (sv[p.title] ? ' voted' : '') },
+          h('button', { class: 'sopen', onclick: () => { S.scenario = p; save(); toast('Loaded a scenario you can now edit or redraft.'); renderStage(); } },
+            h('b', {}, p.title), h('span', {}, p.tagline),
+            h('ol', { class: 'sminiflow', 'aria-hidden': 'true' }, p.steps.map((s) => h('li', {}, s.name)))),
+          star(p.title)))),
         h('p', { class: 'hint' }, 'Or build one yourself:'), bar);
       return box;
     }
     // ponytail: whiteboard-lite — edit any box, reorder/delete/add steps; AI "organises" via Regenerate. Full freeform canvas later; the "Make it your own" sticky zones below already give free notes.
     const reorder = (i, d) => { const j = i + d; if (j < 0 || j >= sc.steps.length) return; [sc.steps[i], sc.steps[j]] = [sc.steps[j], sc.steps[i]]; save(); renderStage(); };
-    const orch = (s) => [h('input', { class: 'loname', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }),
-      h('textarea', { class: 'lodoes', rows: 2, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens', oninput: (e) => { s.does = e.target.value; save(); } })];
-    const slot = (key, ph) => (s) => h('input', { class: 'lslot', value: s[key] || '', placeholder: ph, 'aria-label': ph, oninput: (e) => { s[key] = e.target.value || null; save(); } });
-    const lane = (label, pick, cls) => [h('div', { class: 'lname' }, label), ...sc.steps.map((s) => h('div', { class: 'lcell' }, h('div', { class: cls }, pick(s))))];
-    const controls = [h('div', { class: 'lname' }, ''), ...sc.steps.map((s, i) => h('div', { class: 'lcell lctl' },
-      h('button', { class: 'x', title: 'Move left', 'aria-label': 'Move step left', onclick: () => reorder(i, -1) }, '◀'),
+    const last = sc.steps.length - 1;
+    // Swimlane SOP: phase headers on top, Human above and Agents below the yellow Orchestration backbone; arrows show hand-offs.
+    const slot = (key, ph, dir) => (s) => h('div', { class: `lcell ${dir}` + (s[key] ? ' has' : '') },
+      h('textarea', { class: 'lslot ' + (key === 'human' ? 'lh' : 'la'), rows: 2, value: s[key] || '', placeholder: ph, 'aria-label': ph,
+        oninput: (e) => { s[key] = e.target.value || null; e.target.parentNode.classList.toggle('has', !!e.target.value); save(); } }));
+    const head = (s, i) => h('div', { class: 'lhead' }, h('small', {}, `Step ${i + 1}`),
+      h('input', { class: 'loname', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }));
+    const orch = (s, i) => h('div', { class: 'lcell mid' + (i < last ? ' arr' : '') },
+      h('textarea', { class: 'lo', rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens', oninput: (e) => { s.does = e.target.value; save(); } }));
+    const ctl = (s, i) => h('div', { class: 'lctl' },
+      h('button', { class: 'x', title: 'Move left', 'aria-label': 'Move step left', disabled: i === 0, onclick: () => reorder(i, -1) }, '◀'),
       h('button', { class: 'x', title: 'Delete step', 'aria-label': 'Delete step', onclick: () => { sc.steps.splice(i, 1); save(); renderStage(); } }, '×'),
-      h('button', { class: 'x', title: 'Move right', 'aria-label': 'Move step right', onclick: () => reorder(i, 1) }, '▶')))];
-    box.append(h('h3', {}, sc.title), h('p', { class: 'hint' }, sc.tagline),
+      h('button', { class: 'x', title: 'Move right', 'aria-label': 'Move step right', disabled: i === last, onclick: () => reorder(i, 1) }, '▶'));
+    box.append(h('div', { class: 'scenhead' }, h('div', {}, h('h3', {}, sc.title), h('p', { class: 'hint' }, sc.tagline)), star(sc.title)),
       h('p', { class: 'hint sop' }, 'Your reimagined SOP flow. The yellow Orchestration row is the new, AI-powered backbone bolted onto the classical steps — agents prepare the work, people decide where it matters. Edit any box, reorder with ◀ ▶, add or delete steps, then press "Regenerate with AI" to let the coach reorganise it.'),
-      h('div', { class: 'lanes', style: `grid-template-columns:auto repeat(${sc.steps.length},minmax(130px,1fr))` },
-        lane('Human', slot('human', '+ human'), 'lh'), lane('Orchestration', orch, 'lo'), lane('Agents', slot('agent', '+ agent'), 'la'), ...controls),
+      h('div', { class: 'lanewrap' }, h('div', { class: 'lanes', style: `grid-template-columns:118px repeat(${sc.steps.length},minmax(150px,1fr))` },
+        h('div', { class: 'lcorner' }), sc.steps.map(head),
+        h('div', { class: 'lname' }, 'Human'), sc.steps.map(slot('human', '+ human', 'up')),
+        h('div', { class: 'lname o' }, 'Orchestration'), sc.steps.map(orch),
+        h('div', { class: 'lname' }, 'Agents'), sc.steps.map(slot('agent', '+ agent', 'down')),
+        h('div', { class: 'lfoot' }), sc.steps.map(ctl))),
       h('button', { class: 'add', onclick: () => { sc.steps.push({ name: 'New step', does: '', agent: null, human: null }); save(); renderStage(); } }, '+ step'),
-      h('div', { class: 'fgrid' }, h('div', {}, h('b', {}, 'Opportunity'), h('p', {}, sc.opportunity)), h('div', {}, h('b', {}, 'Why does this matter?'), h('p', {}, sc.value))),
+      h('div', { class: 'fgrid scmeta' }, h('div', {}, h('b', {}, 'Opportunity'), h('p', {}, sc.opportunity)), h('div', {}, h('b', {}, 'Why does this matter?'), h('p', {}, sc.value))),
       h('button', { class: 'add', onclick: () => { S.scenario = null; save(); renderStage(); } }, '↩ See other options'), bar);
     return box;
   },
@@ -430,45 +445,77 @@ function toBuilder() {
 
 /* ---------- stage ---------- */
 // The clock element is rebuilt on every render, so the interval looks it up by id.
-function showClock() { const c = $('clock'); if (c) c.textContent = `${String(Math.floor(timer.left / 60)).padStart(2, '0')}:${String(timer.left % 60).padStart(2, '0')} ${timer.id ? '⏸' : '▶'}`; }
+const resetTimer = () => { clearInterval(timer.id); timer = { left: stage().mins * 60, total: stage().mins * 60, id: null }; };
+function showClock() {
+  const c = $('clock'); if (!c) return;
+  c.textContent = `${String(Math.floor(timer.left / 60)).padStart(2, '0')}:${String(timer.left % 60).padStart(2, '0')}`;
+  const p = $('tplay'); p.textContent = timer.id ? '❚❚' : '▶'; p.setAttribute('aria-label', timer.id ? 'Pause timer' : 'Start timer');
+  $('timer').classList.toggle('running', !!timer.id);
+  $('tbar').style.width = `${timer.total ? Math.min(100, 100 * (1 - timer.left / timer.total)) : 0}%`;
+}
 function tick() { timer.left = Math.max(0, timer.left - 1); if (!timer.left) { clearInterval(timer.id); timer.id = null; toast('Time is up for this stage. Wrap up and move on.'); } showClock(); }
+// Before starting (or while paused) the facilitator can change the time in one-minute steps.
+function adjustTimer(d) { const left = Math.min(180 * 60, Math.max(60, timer.left + d)); timer.total = Math.max(60, (timer.total || timer.left) + (left - timer.left)); timer.left = left; showClock(); }
 function renderStage() {
   const st = stage(), n = flow().stages.length, y = scrollY;
   if (st.id === 'present' && !S.f.__procDone && !S.notes.some((nn) => nn.zone === 'p_process')) { S.f.__procDone = 1; extractProcess(false); save(); }
   live = [];
   const zones = st.widgets.flatMap((w) => w.zones || []).map((z) => z.id), proc = st.widgets.some((w) => w.type === 'process');
   if (!zones.includes(activeZone) && !(proc && activeZone.startsWith('fr:'))) activeZone = zones[0] || (proc && S.steps[0] ? 'fr:' + S.steps[0].id : 'parking');
-  const clock = h('button', { id: 'clock', class: 'clock', title: 'Start / pause timer', 'aria-label': 'Stage timer, start or pause', onclick: () => {
-    if (timer.id) { clearInterval(timer.id); timer.id = null; } else timer.id = setInterval(tick, 1000);
-    showClock(); } });
-  const go = (d) => { S.stage = Math.min(n - 1, Math.max(0, S.stage + d)); save(); clearInterval(timer.id); timer = { left: stage().mins * 60, id: null }; renderStage(); scrollTo(0, 0); };
-  const jump = (i) => { if (i === S.stage) return; S.stage = Math.min(n - 1, Math.max(0, i)); save(); clearInterval(timer.id); timer = { left: stage().mins * 60, id: null }; renderStage(); scrollTo(0, 0); };
+  const toggleTimer = () => { if (timer.id) { clearInterval(timer.id); timer.id = null; } else if (timer.left) timer.id = setInterval(tick, 1000); showClock(); };
+  const timerCard = h('div', { id: 'timer', class: 'timer', role: 'timer' },
+    h('div', { class: 'tlabel' }, 'Stage timer', h('button', { class: 'treset', title: `Reset to ${st.mins} min`, 'aria-label': 'Reset timer', onclick: () => { resetTimer(); showClock(); } }, '↺')),
+    h('div', { class: 'trow' },
+      h('button', { class: 'tadj', title: 'One minute less', 'aria-label': 'One minute less', onclick: () => adjustTimer(-60) }, '−'),
+      h('span', { id: 'clock', class: 'clock' }),
+      h('button', { class: 'tadj', title: 'One minute more', 'aria-label': 'One minute more', onclick: () => adjustTimer(60) }, '+'),
+      h('button', { id: 'tplay', class: 'tplay', onclick: toggleTimer }, '▶')),
+    h('div', { class: 'tbar' }, h('i', { id: 'tbar' })));
+  const go = (d) => { S.stage = Math.min(n - 1, Math.max(0, S.stage + d)); save(); resetTimer(); renderStage(); scrollTo(0, 0); };
+  const jump = (i) => { if (i === S.stage) return; S.stage = Math.min(n - 1, Math.max(0, i)); save(); resetTimer(); renderStage(); scrollTo(0, 0); };
   // Pilot visibility: hide warm-up games/steps and the Design-questions box, but keep the data and code (see PILOT in content.js).
   const widgets = st.widgets.filter((w) => !(PILOT.hideWarmup && w.type === 'game' && /warm-?up/i.test(w.label || '')) && !(PILOT.hideDesignQuestions && w.type === 'fields' && /^design questions/i.test(w.title || '')));
   const steps = PILOT.hideWarmup ? st.steps.filter((s) => !/warm-?up/i.test(s.t)) : st.steps;
   const bkIcon = (b) => ({ Individual: '👤', Pairs: '👥', Groups: '👪', Plenary: '🗣' }[b] || '👥');
   const bkBadge = (b) => b && h('span', { class: 'breakout' }, `${bkIcon(b)} ${b}`);
-  const crumbs = h('nav', { class: 'crumbs', 'aria-label': 'Stages' }, flow().stages.flatMap((stg, i) => [
-    i ? h('span', { class: 'crumbsep', 'aria-hidden': 'true' }, '→') : null,
-    h('button', { class: 'crumb' + (i === S.stage ? ' on' : i < S.stage ? ' done' : ''), 'aria-current': i === S.stage ? 'step' : null, title: stg.title, onclick: () => jump(i) }, stg.title.split('·').pop().trim()),
-  ].filter(Boolean)));
+  const tabs = h('nav', { class: 'tabs', 'aria-label': 'Stages' }, flow().stages.map((stg, i) =>
+    h('button', { class: 'tab' + (i === S.stage ? ' on' : i < S.stage ? ' done' : ''), 'aria-current': i === S.stage ? 'step' : null, title: stg.title, onclick: () => jump(i) },
+      h('span', { class: 'tabnum' }, i < S.stage ? '✓' : String(i + 1)), h('span', {}, stg.title.split('·').pop().trim()))));
+  const tool = (icon, label, onclick, extra = {}) => h('button', { class: 'tool', onclick, ...extra }, h('span', { class: 'ti', 'aria-hidden': 'true' }, icon), label);
   $('app').replaceChildren(
-    h('header', { class: 'top' },
-      h('div', { class: 'ttl' }, h('div', { class: 'brand' }, 'EY.ai Lab'), crumbs, h('div', { class: 'prog', role: 'progressbar', 'aria-valuenow': S.stage + 1, 'aria-valuemax': n }, h('i', { style: `width:${(100 * (S.stage + 1)) / n}%` })), h('span', { class: 'round' }, `${st.badge || 'Stage'} · ${S.stage + 1} of ${n}`), h('h1', {}, st.title)),
-      h('div', { class: 'obj' }, h('b', {}, 'Objective'), h('p', {}, st.objective)),
-      h('div', { class: 'tools' }, h('button', { title: 'Back to the start screen; your board is kept', onclick: () => { home = true; render(); } }, '⌂ Home'), clock, h('span', { class: 'score', title: 'Points from games' }, `★ ${total()}`),
-        !PILOT.hideSignalsArcade && h('button', { onclick: () => dialog('Six signals that there is an opportunity', SIGNALS.map((s) => h('div', { class: 'sig' }, h('b', {}, `${s.n} · ${s.name}`), h('p', {}, 'Listen for: ' + s.listen), h('p', {}, 'Ask: "' + s.ask + '"')))) }, 'Signals'),
-        !PILOT.hideSignalsArcade && h('button', { onclick: () => dialog('Arcade', Object.entries(GAMES).map(([k, g]) => h('button', { class: 'gamecta', onclick: () => openGame(k) }, '🎲 ' + g.title, h('small', {}, S.score[k] != null ? `best: ${S.score[k]} pts` : g.intro)))) }, 'Arcade'),
-        h('button', { onclick: () => dialog('Parking lot', [h('p', { class: 'hint' }, 'Anything important that does not fit the current stage.'), zoneEl({ id: 'parking', label: 'Notes', color: 'white' })]) }, 'Parking lot'),
-        h('button', { onclick: () => { chatOpen = !chatOpen; renderStage(); } }, chatOpen ? 'Hide coach' : 'Coach'),
-        h('button', { onclick: () => { if (confirm('Start over? This clears your whole board.')) { S = blank(); save(); render(); } } }, 'Restart'))),
+    h('header', { class: 'appbar' },
+      h('button', { class: 'logo', title: 'Back to the start screen; your board is kept', onclick: () => { home = true; render(); } },
+        h('span', { class: 'eylogo', 'aria-hidden': 'true' }, 'EY'), h('span', { class: 'lab' }, h('b', {}, 'EY.ai Lab'), h('small', {}, flow().name))),
+      h('div', { class: 'tools' },
+        h('span', { class: 'score', title: 'Points from games' }, h('i', { 'aria-hidden': 'true' }, '★'), `${total()} pts`),
+        !PILOT.hideSignalsArcade && tool('∿', 'Signals', () => dialog('Six signals that there is an opportunity', SIGNALS.map((s) => h('div', { class: 'sig' }, h('b', {}, `${s.n} · ${s.name}`), h('p', {}, 'Listen for: ' + s.listen), h('p', {}, 'Ask: "' + s.ask + '"'))))),
+        tool('▤', 'Parking lot', () => dialog('Parking lot', [h('p', { class: 'hint' }, 'Anything important that does not fit the current stage.'), zoneEl({ id: 'parking', label: 'Notes', color: 'white' })])),
+        !PILOT.hideSignalsArcade && tool('◫', 'Arcade', () => dialog('Arcade', Object.entries(GAMES).map(([k, g]) => h('button', { class: 'gamecta', onclick: () => openGame(k) }, '🎲 ' + g.title, h('small', {}, S.score[k] != null ? `best: ${S.score[k]} pts` : g.intro))))),
+        tool('◌', chatOpen ? 'Hide coach' : 'Coach', () => { chatOpen = !chatOpen; renderStage(); }),
+        h('span', { class: 'tsep', 'aria-hidden': 'true' }),
+        tool('⌂', 'Home', () => { home = true; render(); }, { title: 'Back to the start screen; your board is kept' }),
+        tool('↻', 'Restart', () => { if (confirm('Start over? This clears your whole board.')) { S = blank(); save(); render(); } }))),
+    tabs,
+    h('section', { class: 'hero' },
+      h('div', { class: 'capsules', 'aria-hidden': 'true' }, [0, 1, 2, 3, 4].map(() => h('i'))),
+      h('div', { class: 'herotext' },
+        h('div', { class: 'eyebrow' }, `${st.badge || 'Stage'} ${S.stage + 1} of ${n}`),
+        h('h1', {}, st.title),
+        h('div', { class: 'obj' }, h('b', {}, 'Objective'), h('p', {}, st.objective))),
+      timerCard),
     h('div', { class: 'layout' + (chatOpen ? '' : ' nochat') },
       h('aside', { class: 'steps' },
-        h('div', { class: 'blob start' }, h('b', {}, 'Where to start'), h('p', {}, `Begin with step 1 below${steps[0] ? `: ${steps[0].t}` : ''}. Open a step to read its explanation. The coach on the right can help any time.`)),
-        steps.map((s, i) => h('details', { class: 'glass step' }, h('summary', {}, h('small', {}, `◷ ${s.mins} min`), h('b', {}, `${i + 1}. ${s.t}`), bkBadge(s.bk || BREAKOUT[st.id])), h('p', {}, s.d))),
-        h('details', { class: 'blob' }, h('summary', {}, h('b', {}, 'Questions along the way')), h('ul', {}, st.ask.map((q) => h('li', {}, q)))),
-        h('div', { class: 'bar' }, S.stage > 0 && h('button', { class: 'add', onclick: () => go(-1) }, '← Back'), S.stage < n - 1 && h('button', { class: 'primary', onclick: () => go(1) }, 'Next stage →'))),
-      h('main', { class: 'glass board' }, widgets.map((w) => W[w.type](w))),
+        h('section', { class: 'card acts' },
+          h('div', { class: 'eyebrow dark' }, 'Activities'),
+          h('p', { class: 'start' }, h('b', {}, 'Where to start · '), `Begin with step 1${steps[0] ? `: ${steps[0].t}` : ''}. Open a step to read its explanation. The coach on the right can help any time.`),
+          h('ol', { class: 'timeline' }, steps.map((s, i) => h('li', {},
+            h('details', { class: 'step', open: i === 0 },
+              h('summary', {}, h('span', { class: 'snum' }, String(i + 1)),
+                h('span', { class: 'stitle' }, h('b', {}, s.t), h('span', { class: 'smeta' }, h('small', {}, `${s.mins} min`), bkBadge(s.bk || BREAKOUT[st.id])))),
+              h('p', {}, s.d)))))),
+        h('details', { class: 'card qs' }, h('summary', {}, h('span', { class: 'qicon', 'aria-hidden': 'true' }, '?'), 'Questions along the way'), h('ul', {}, st.ask.map((q) => h('li', {}, q)))),
+        h('div', { class: 'bar stagenav' }, S.stage > 0 && h('button', { class: 'ghost', onclick: () => go(-1) }, '‹  Back'), S.stage < n - 1 && h('button', { class: 'primary', onclick: () => go(1) }, 'Next stage  ›'))),
+      h('main', { class: 'board' }, widgets.map((w) => W[w.type](w))),
       chatOpen && chatPanel()));
   showClock(); scrollTo(0, y);
 }
@@ -535,10 +582,13 @@ function chatPanel() {
   };
   const input = h('textarea', { rows: 2, placeholder: 'Ask the coach…', 'aria-label': 'Message the coach', onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); input.value = ''; } } });
   draw();
-  return h('aside', { class: 'glass chat' }, h('h3', {}, 'Coach ', h('button', { class: 'aibtn', title: 'AI settings', onclick: aiSettings }, '⚙ ' + aiLabel())),
+  return h('aside', { class: 'card chat' },
+    h('div', { class: 'chathead' }, h('span', { class: 'coachicon', 'aria-hidden': 'true' }, '✦'),
+      h('div', {}, h('b', {}, 'Coach'), h('small', {}, h('i', { class: 'dot' + (AI ? ' on' : '') }), AI ? 'Online' : 'Guide mode')),
+      h('button', { class: 'aibtn', title: 'AI settings', onclick: aiSettings }, '⚙ ' + aiLabel())),
     log,
     h('div', { class: 'chips' }, ['What should I do here?', 'Challenge my board', 'Suggest sticky notes'].map((c) => h('button', { onclick: () => ask(c) }, c))),
-    h('div', { class: 'bar' }, input, h('button', { class: 'primary', 'aria-label': 'Send', onclick: () => { ask(input.value); input.value = ''; } }, '↑')));
+    h('div', { class: 'ask' }, input, h('button', { class: 'primary send', 'aria-label': 'Send', onclick: () => { ask(input.value); input.value = ''; } }, '↑')));
 }
 
 /* ---------- dialogs, games, toast ---------- */
@@ -583,5 +633,5 @@ function openGame(key) {
   next();
 }
 
-function render() { if (home || !FLOWS[S.mode]) return renderSetup(); timer.left ||= stage().mins * 60; renderStage(); }
+function render() { if (home || !FLOWS[S.mode]) return renderSetup(); if (!timer.left) resetTimer(); renderStage(); }
 loadStatus().then(render);

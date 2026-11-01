@@ -110,11 +110,11 @@ export const PRINCIPLES = [
 ];
 
 const deepDive = {
-  id: 'deep', title: 'Deep Dive & Prototype', mins: 20,
+  id: 'deep', title: 'Deep Dive & Prototype', mins: 25,
   objective: 'Bring the selected scenario to life: define how it works, who it serves and the value it creates. Then build a tangible prototype you can explore, test and refine.',
   steps: [
     { t: 'Fill the canvas', mins: 10, d: 'One or two sentences per row. Keep the solution simple and realistic as a first prototype.' },
-    { t: 'Build the prototype', mins: 5, d: 'Generate a working, clickable prototype from your canvas.' },
+    { t: 'Build the prototype', mins: 10, d: 'Generate a working, clickable prototype from your canvas.' },
     { t: 'Test and refine', mins: 5, d: 'Click through it as the primary user. What is missing? Ask for a change and rebuild.' },
   ],
   ask: ['Who touches this first on a normal day, and what do they type or click?', 'Which data must exist before this works at all?', 'What is the one screen that proves the value?'],
@@ -135,10 +135,10 @@ const deepDive = {
 
 const full = [
   {
-    id: 'today', title: "Today's Reality", mins: 30,
+    id: 'today', title: "Today's Reality", mins: 25,
     objective: 'Build a shared understanding of the current process by exploring its key activities, decision points, stakeholders and friction points. Use these insights as the foundation to reimagine a better, smarter way of working.',
     steps: [
-      { t: 'Understand the process', mins: 15, bk: 'Groups', d: 'Review the process together and align on how it works today. Ensure everyone has a shared understanding before moving on.' },
+      { t: 'Understand the process', mins: 10, bk: 'Groups', d: 'Review the process together and align on how it works today. Ensure everyone has a shared understanding before moving on.' },
       { t: 'Capture context and identify friction points', mins: 15, bk: 'Groups', d: 'Identify any important context, constraints, assumptions or dependencies that influence the process today. Then discuss where time, effort, information or quality is lost, and capture the most important friction points on the board. Agree on the process step or challenge that offers the greatest opportunity for improvement — this becomes the focus for the next exercises.' },
     ],
     ask: ['What exactly triggers this process, and who can declare it ready?', 'What share of work is standard flow versus exception handling?', 'Which exceptions start here, and which arrive from upstream?', 'Which fields or documents are most often missing or inconsistent?', 'Which approvals are legally or financially required, and which exist out of habit?', 'Does the system hold the real logic, or do teams rely on extra files, inboxes and knowledge?'],
@@ -158,13 +158,13 @@ const full = [
     ],
   },
   {
-    id: 'jobs', title: 'Current State · Jobs-to-be-Done', mins: 30,
+    id: 'jobs', title: 'Current State · Jobs-to-be-Done', mins: 25,
     objective: 'Identify the most important drivers for change and the key jobs-to-be-done. Explore what needs to be achieved, whether it is best suited for humans, AI or both, and why it matters for better outcomes.',
     steps: [
       { t: 'Identify the Jobs-to-be-Done', mins: 5, bk: 'Individual', d: 'Reflect on the selected process challenge and identify the most important jobs that need to be accomplished to achieve a successful outcome. Focus on what needs to be achieved, not how it is done today. Capture your ideas on sticky notes.' },
       { t: 'Share and Cluster', mins: 5, bk: 'Pairs', d: 'Share your ideas with a partner and discuss similarities, differences and emerging themes. Together, identify the jobs-to-be-done that are most critical to success.' },
       { t: 'Prioritize as a Group', mins: 5, bk: 'Groups', d: 'Review the identified jobs-to-be-done and agree on the most important ones. Focus on the jobs that would create the greatest value if they could be fulfilled more effectively.' },
-      { t: 'Human, AI, or Both?', mins: 15, bk: 'Pairs', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, AI, or both. Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
+      { t: 'Human, AI, or Both?', mins: 10, bk: 'Pairs', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, AI, or both. Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
     ],
     ask: ['What are we actually trying to achieve here, regardless of today\'s tools?', 'Is this job judgement, or is it gathering and comparing?', 'What would a person still decide if everything were prepared for them?'],
     ideas: ['First time right at entry', 'Predict peaks to plan capacity', 'Clear governance on who may change what', 'Deliver on time'],
@@ -179,12 +179,12 @@ const full = [
     ],
   },
   {
-    id: 'dream', title: 'Dream State · Reimagine the Process', mins: 20,
+    id: 'dream', title: 'Dream State · Reimagine the Process', mins: 25,
     objective: 'Imagine a dream state where the most important jobs-to-be-done are fulfilled seamlessly. Define what success looks like and the value it could create at each level.',
     steps: [
-      { t: 'Imagine the Ideal Future', mins: 3, bk: 'Individual', d: 'Forget today\'s constraints, systems and ways of working. Imagine a dream state where the most important jobs-to-be-done are fulfilled seamlessly. "How amazing would it be if…"' },
+      { t: 'Imagine the Ideal Future', mins: 5, bk: 'Individual', d: 'Forget today\'s constraints, systems and ways of working. Imagine a dream state where the most important jobs-to-be-done are fulfilled seamlessly. "How amazing would it be if…"' },
       { t: 'Share and Build', mins: 5, bk: 'Pairs', d: 'Share your ideas with a partner and build on each other\'s thinking. Which elements are most compelling? Push them one step further.' },
-      { t: 'Define the Dream State', mins: 12, bk: 'Groups', d: 'As a group, define what success looks like and the value it could create at each level. Place each idea at the level where the value lands: the team, the organisation, the customer.' },
+      { t: 'Define the Dream State', mins: 15, bk: 'Groups', d: 'As a group, define what success looks like and the value it could create at each level. Place each idea at the level where the value lands: the team, the organisation, the customer.' },
     ],
     ask: ['How amazing would it be if…?', 'What would the customer notice first?', 'What would your team stop doing entirely?'],
     ideas: ['First time right means less work', 'The customer receives exactly what they ordered', 'Fewer changes downstream, more compliance', 'Trust: we are a reliable partner'],
@@ -195,10 +195,10 @@ const full = [
     ] }],
   },
   {
-    id: 'scenario', title: 'Reimagined AI-Powered Scenario', mins: 30,
+    id: 'scenario', title: 'Reimagined AI-Powered Scenario', mins: 25,
     objective: 'Turn your jobs and dream state into AI-powered scenarios, reflect on them as a group, vote on the opportunities that matter most, and select the scenario to take into prototyping.',
     steps: [
-      { t: 'Review and Reflect on the Reimagined Scenarios', mins: 20, bk: 'Groups', d: 'Generate the scenario from your board and read it together. Reflect as a group on how well it supports your future vision, the value it creates and its potential impact. Explore dependencies, customer communication, exceptions, process impact, risks and feedback loops.' },
+      { t: 'Review and Reflect on the Reimagined Scenarios', mins: 15, bk: 'Groups', d: 'Generate the scenario from your board and read it together. Reflect as a group on how well it supports your future vision, the value it creates and its potential impact. Explore dependencies, customer communication, exceptions, process impact, risks and feedback loops.' },
       { t: 'Prioritize Opportunities', mins: 2, bk: 'Individual', d: 'You have 2 votes. Vote for the use cases that create the greatest value, best support the vision and can significantly improve the process.' },
       { t: 'Select a Scenario', mins: 8, bk: 'Groups', d: 'Review the most-voted opportunities as a group and select the scenario to move forward into prototyping. Make it your own before taking it further.' },
     ],
@@ -208,19 +208,19 @@ const full = [
       { type: 'scenario' },
       { type: 'vote' },
       { type: 'notes', title: 'Make it your own', zones: [
-        { id: 'r_dep', label: 'Dependencies & assumptions' }, { id: 'r_comm', label: 'Customer communication' },
-        { id: 'r_exc', label: 'Exception handling' }, { id: 'r_imp', label: 'Process impact' },
-        { id: 'r_risk', label: 'Risks & controls' }, { id: 'r_learn', label: 'Learning & feedback loops' },
+        { id: 'r_dep', label: 'Dependencies & assumptions', color: 'yellow' }, { id: 'r_comm', label: 'Customer communication', color: 'orange' },
+        { id: 'r_exc', label: 'Exception handling', color: 'pink' }, { id: 'r_imp', label: 'Process impact', color: 'green' },
+        { id: 'r_risk', label: 'Risks & controls', color: 'purple' }, { id: 'r_learn', label: 'Learning & feedback loops', color: 'white' },
       ] },
     ],
   },
   {
-    id: 'prioritize', title: 'Prioritize', mins: 20,
+    id: 'prioritize', title: 'Prioritize', mins: 25,
     objective: 'Select and refine the most relevant use case to move forward into prototyping.',
     steps: [
       { t: 'Review the use cases', mins: 5, d: 'List the candidate use cases from your scenario. Consider value, problems solved and impact.' },
       { t: 'Vote', mins: 5, d: 'You have 2 votes. Vote for what creates the greatest value, best supports the vision and can significantly improve the process.' },
-      { t: 'Review the chosen one', mins: 10, d: 'Test the winner against the design questions.' },
+      { t: 'Review the chosen one', mins: 15, d: 'Test the winner against the design questions.' },
     ],
     ask: ['Which one would the team miss most if it disappeared after a month?', 'Which is small enough to prototype this week?'],
     ideas: ['Capture and standardise incoming changes', 'Detect and explain inconsistencies', 'Recommend a resolution and route to the right expert', 'Reporting at the end of the month'],
