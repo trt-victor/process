@@ -299,6 +299,160 @@ function penPad(n, onText) {
 // Pen for any text box: write by hand, and the recognised text is added to the box (saved through the box's own input handler).
 const pen = (ta) => h('span', { class: 'penbox' }, ta, h('button', { class: 'penbtn', type: 'button', title: 'Write by hand', 'aria-label': 'Write in this box by hand',
   onclick: (e) => { e.preventDefault(); e.stopPropagation(); penPad({ text: '', color: 'white' }, (t) => { ta.value = ta.value.trim() ? ta.value.trim() + '\n' + t : t; ta.dispatchEvent(new Event('input', { bubbles: true })); }); } }, '✎'));
+/* ---------- whiteboard: the reimagined scenario as a Miro-like board ---------- */
+// Pan by dragging the background or scrolling, zoom with ctrl/⌘ + scroll or the + − buttons, drag cards by their header
+// (or focus a header and use the arrow keys). Each step's Human card hangs above it and its Agent card below, and both move with it.
+// The left-to-right position of the step cards is the step order, so the team builds the process by arranging it.
+const WB = { gap: 250, human: -200, agent: 200 };
+let wbView = null, wbSc = null; // pan/zoom survives re-renders of the same scenario; a new scenario starts fitted
+function whiteboard(sc) {
+  if (wbSc !== sc) { wbSc = sc; wbView = null; }
+  sc.steps.forEach((s, i) => { if (!Number.isFinite(s.x)) { s.x = i * WB.gap; s.y = 0; } });
+  sc.notes ||= [];
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'wblines'); svg.setAttribute('aria-hidden', 'true');
+  const world = h('div', { class: 'wbworld' }), zl = h('span', { class: 'wbzl' });
+  const vp = h('div', { class: 'wb', role: 'region', 'aria-label': 'Scenario whiteboard' }, world);
+  const apply = () => { if (!wbView) return; world.style.transform = `translate(${wbView.x}px,${wbView.y}px) scale(${wbView.z})`; zl.textContent = Math.round(wbView.z * 100) + '%'; };
+  const zoomAt = (f, cx, cy) => { const z = Math.min(2, Math.max(0.3, wbView.z * f)); wbView = { z, x: cx - (cx - wbView.x) * z / wbView.z, y: cy - (cy - wbView.y) * z / wbView.z }; apply(); };
+  const fit = () => {
+    const els = [...world.querySelectorAll('.wbcard')];
+    if (!els.length || !vp.clientWidth) { wbView = { x: 160, y: 260, z: 1 }; return apply(); }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const el of els) { x0 = Math.min(x0, el.offsetLeft); y0 = Math.min(y0, el.offsetTop); x1 = Math.max(x1, el.offsetLeft + el.offsetWidth); y1 = Math.max(y1, el.offsetTop + el.offsetHeight); }
+    x0 -= 150; // room for the lane labels
+    const W = vp.clientWidth, H = vp.clientHeight, z = Math.min(1.1, Math.max(0.55, Math.min((W - 60) / (x1 - x0), (H - 60) / (y1 - y0))));
+    // Never fit below 55% so cards stay readable: a long flow then starts at its first step and the team pans right.
+    wbView = { z, x: Math.max(30 - x0 * z, (W - (x1 - x0) * z) / 2 - x0 * z), y: (H - (y1 - y0) * z) / 2 - y0 * z }; apply();
+  };
+  const pos = (el, x, y) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
+  // Where a step's human/agent card (or its "+" chip, when empty) sits.
+  const at = (s, k, chip) => chip ? [s.x + 50, k === 'human' ? s.y - 36 : s.y + 168] : [s.x + (s[k + 'dx'] || 0), s.y + (s[k + 'dy'] ?? WB[k])];
+  const att = { human: [], agent: [] }, stepEls = [];
+  const place = (s, i) => { for (const k of ['human', 'agent']) { const el = att[k][i]; if (el) pos(el, ...at(s, k, el.classList.contains('wbchip'))); } };
+
+  const lines = () => {
+    const b = (el) => ({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
+    let d = '<defs><marker id="wbarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#1a1a24"/></marker></defs>';
+    stepEls.forEach((el, i) => {
+      const a = b(el), n = stepEls[i + 1] && b(stepEls[i + 1]);
+      if (n) { const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = n.x - 4, y2 = n.y + n.h / 2, c = Math.max(40, Math.abs(x2 - x1) / 2); d += `<path class="flow" d="M${x1} ${y1}C${x1 + c} ${y1},${x2 - c} ${y2},${x2} ${y2}" marker-end="url(#wbarr)"/>`; }
+      for (const k of ['human', 'agent']) {
+        const e = att[k][i]; if (!e || e.classList.contains('wbchip')) continue;
+        const c = b(e), up = k === 'human';
+        d += `<path class="link" d="M${a.x + a.w / 2} ${up ? a.y : a.y + a.h}L${c.x + c.w / 2} ${up ? c.y + c.h : c.y}"/>`;
+      }
+    });
+    svg.innerHTML = d;
+  };
+  // Drag by a handle with the pointer, or nudge with the arrow keys. start() captures the starting state and returns { move(dx, dy), end() }.
+  const draggable = (handle, start) => {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button || e.target.closest('input,button,textarea')) return;
+      e.preventDefault(); e.stopPropagation(); handle.setPointerCapture(e.pointerId);
+      const sx = e.clientX, sy = e.clientY, op = start();
+      const mv = (ev) => op.move((ev.clientX - sx) / wbView.z, (ev.clientY - sy) / wbView.z);
+      const up = () => { handle.removeEventListener('pointermove', mv); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up); op.end(); };
+      handle.addEventListener('pointermove', mv); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('keydown', (e) => {
+      const d = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] }[e.key];
+      if (!d || e.target !== handle) return;
+      e.preventDefault(); const op = start(); op.move(...d); op.end();
+    });
+  };
+  const handle = (label, aria, ...btns) => h('div', { class: 'wbhandle', tabindex: 0, role: 'button', 'aria-label': aria + ': drag, or use the arrow keys to move' }, h('small', {}, label), h('span', { class: 'wbbtns' }, btns));
+
+  const stepCard = (s, i) => {
+    const el = h('div', { class: 'wbcard wbstep' });
+    const hd = handle(`Step ${i + 1}`, `Step ${i + 1}, ${s.name}`, h('button', { class: 'wbx', title: 'Delete step', 'aria-label': 'Delete step ' + s.name, onclick: () => { sc.steps.splice(sc.steps.indexOf(s), 1); save(); draw(); } }, '×'));
+    el.append(hd, h('input', { class: 'wbtitle', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }),
+      pen(h('textarea', { rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens in ' + s.name, oninput: (e) => { s.does = e.target.value; save(); } })));
+    pos(el, s.x, s.y);
+    draggable(hd, () => {
+      const x = s.x, y = s.y;
+      return { move: (dx, dy) => { s.x = x + dx; s.y = y + dy; pos(el, s.x, s.y); place(s, i); lines(); },
+        end: () => { const before = sc.steps.slice(); sc.steps.sort((a, b) => a.x - b.x); save(); if (sc.steps.some((x, j) => x !== before[j])) { draw(); toast('Step order updated.'); } } };
+    });
+    return (stepEls[i] = el);
+  };
+  const attached = (s, i, k) => {
+    const label = k === 'human' ? 'Human' : 'Agent';
+    if (s[k] == null) {
+      const chip = h('button', { class: 'wbchip', onclick: () => { s[k] = ''; save(); draw(); world.querySelector(`[data-att="${k}${i}"] textarea`)?.focus(); } }, '+ ' + label.toLowerCase());
+      pos(chip, ...at(s, k, true));
+      return (att[k][i] = chip);
+    }
+    const el = h('div', { class: `wbcard wb${k}`, 'data-att': k + i });
+    const hd = handle(label, `${label} for ${s.name}`, h('button', { class: 'wbx', title: 'Remove', 'aria-label': `Remove ${label.toLowerCase()} from ${s.name}`, onclick: () => { s[k] = null; delete s[k + 'dx']; delete s[k + 'dy']; save(); draw(); } }, '×'));
+    el.append(hd, pen(h('textarea', { rows: 2, value: s[k], placeholder: k === 'human' ? 'What a person does here…' : 'What the agent does…', 'aria-label': `${label} in ${s.name}`, oninput: (e) => { s[k] = e.target.value; save(); } })));
+    pos(el, ...at(s, k));
+    draggable(hd, () => {
+      const dx0 = s[k + 'dx'] || 0, dy0 = s[k + 'dy'] ?? WB[k];
+      return { move: (dx, dy) => { s[k + 'dx'] = dx0 + dx; s[k + 'dy'] = dy0 + dy; pos(el, ...at(s, k)); lines(); }, end: save };
+    });
+    return (att[k][i] = el);
+  };
+  const noteCard = (n) => {
+    const el = h('div', { class: 'wbcard wbnote c-' + n.color });
+    const hd = handle('Note', 'Sticky note',
+      h('button', { class: 'wbx', title: 'Change colour', 'aria-label': 'Change colour', onclick: () => { n.color = COLORS[(COLORS.indexOf(n.color) + 1) % COLORS.length]; el.className = 'wbcard wbnote c-' + n.color; save(); } }, '◐'),
+      h('button', { class: 'wbx', title: 'Delete note', 'aria-label': 'Delete note', onclick: () => { sc.notes = sc.notes.filter((x) => x !== n); save(); draw(); } }, '×'));
+    el.append(hd, pen(h('textarea', { rows: 3, value: n.text, placeholder: 'Type here…', 'aria-label': 'Sticky note', oninput: (e) => { n.text = e.target.value; save(); } })));
+    pos(el, n.x, n.y);
+    draggable(hd, () => { const x = n.x, y = n.y; return { move: (dx, dy) => { n.x = x + dx; n.y = y + dy; pos(el, n.x, n.y); }, end: save }; });
+    el.dataset.note = n.id;
+    return el;
+  };
+
+  const draw = () => {
+    stepEls.length = att.human.length = att.agent.length = 0;
+    const minX = sc.steps.length ? Math.min(...sc.steps.map((s) => s.x)) : 0;
+    const lane = (top, label, cls) => [h('div', { class: 'wbband' + cls, style: `top:${top}px` }), h('div', { class: 'wblabel', style: `left:${minX - 140}px;top:${top + 70}px` }, label)];
+    world.replaceChildren(svg, ...lane(WB.human - 20, 'Human', ''), ...lane(-20, 'Orchestration', ' o'), ...lane(WB.agent - 20, 'Agents', ''),
+      ...sc.steps.flatMap((s, i) => [stepCard(s, i), attached(s, i, 'human'), attached(s, i, 'agent')]), ...sc.notes.map(noteCard));
+    requestAnimationFrame(lines);
+  };
+  const center = () => ({ x: (vp.clientWidth / 2 - wbView.x) / wbView.z, y: (vp.clientHeight / 2 - wbView.y) / wbView.z });
+  const addNote = (x, y) => {
+    const c = center(), n = { id: uid(), x: x ?? c.x - 80, y: y ?? c.y - 50, text: '', color: 'yellow' };
+    sc.notes.push(n); save(); draw(); world.querySelector(`[data-note="${n.id}"] textarea`)?.focus();
+  };
+  const addStep = () => {
+    const last = sc.steps[sc.steps.length - 1];
+    sc.steps.push({ name: 'New step', does: '', agent: null, human: null, x: last ? last.x + WB.gap : 0, y: last ? last.y : 0 });
+    save(); draw(); requestAnimationFrame(fit);
+  };
+
+  // Pan: drag the empty background. Double-click it for a sticky note. Wheel pans; ctrl/⌘ + wheel (and trackpad pinch) zooms.
+  vp.addEventListener('pointerdown', (e) => {
+    if (e.button || e.target !== vp) return;
+    vp.setPointerCapture(e.pointerId); vp.classList.add('panning');
+    const sx = e.clientX, sy = e.clientY, vx = wbView.x, vy = wbView.y;
+    const mv = (ev) => { wbView.x = vx + ev.clientX - sx; wbView.y = vy + ev.clientY - sy; apply(); };
+    const up = () => { vp.classList.remove('panning'); vp.removeEventListener('pointermove', mv); vp.removeEventListener('pointerup', up); vp.removeEventListener('pointercancel', up); };
+    vp.addEventListener('pointermove', mv); vp.addEventListener('pointerup', up); vp.addEventListener('pointercancel', up);
+  });
+  vp.addEventListener('dblclick', (e) => { if (e.target !== vp) return; const r = vp.getBoundingClientRect(); addNote((e.clientX - r.left - wbView.x) / wbView.z - 80, (e.clientY - r.top - wbView.y) / wbView.z - 20); });
+  vp.addEventListener('wheel', (e) => {
+    if (e.target.closest('textarea') && !(e.ctrlKey || e.metaKey)) return; // let long text scroll
+    e.preventDefault();
+    const r = vp.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    else { wbView.x -= e.deltaX; wbView.y -= e.deltaY; apply(); }
+  }, { passive: false });
+  const mid = (f) => zoomAt(f, vp.clientWidth / 2, vp.clientHeight / 2);
+  vp.append(
+    h('div', { class: 'wbtools', role: 'toolbar', 'aria-label': 'Whiteboard tools' },
+      h('button', { title: 'Add a step at the end of the flow', onclick: addStep }, '+ Step'),
+      h('button', { title: 'Add a sticky note in the middle of the view', onclick: () => addNote() }, '+ Sticky')),
+    h('div', { class: 'wbzoom', role: 'toolbar', 'aria-label': 'Zoom' },
+      h('button', { 'aria-label': 'Zoom out', onclick: () => mid(1 / 1.2) }, '−'), zl,
+      h('button', { 'aria-label': 'Zoom in', onclick: () => mid(1.2) }, '+'),
+      h('button', { title: 'Fit the whole board in view', onclick: fit }, 'Fit')));
+  draw();
+  requestAnimationFrame(() => (wbView ? apply() : fit()));
+  return vp;
+}
 function addNote(zoneId, text = '', color = 'yellow') { const n = { id: uid(), zone: zoneId, text, color }; S.notes.push(n); save(); return n; }
 function zoneEl(z, inner) {
   const body = h('div', { class: 'znotes' });
@@ -480,30 +634,9 @@ const W = {
         h('p', { class: 'hint' }, 'Or build one yourself:'), bar);
       return box;
     }
-    // ponytail: whiteboard-lite — edit any box, reorder/delete/add steps; AI "organises" via Regenerate. Full freeform canvas later; the "Make it your own" sticky zones below already give free notes.
-    const reorder = (i, d) => { const j = i + d; if (j < 0 || j >= sc.steps.length) return; [sc.steps[i], sc.steps[j]] = [sc.steps[j], sc.steps[i]]; save(); renderStage(); };
-    const last = sc.steps.length - 1;
-    // Swimlane SOP: phase headers on top, Human above and Agents below the yellow Orchestration backbone; arrows show hand-offs.
-    const slot = (key, ph, dir) => (s) => h('div', { class: `lcell ${dir}` + (s[key] ? ' has' : '') },
-      pen(h('textarea', { class: 'lslot ' + (key === 'human' ? 'lh' : 'la'), rows: 2, value: s[key] || '', placeholder: ph, 'aria-label': ph,
-        oninput: (e) => { s[key] = e.target.value || null; e.target.closest('.lcell').classList.toggle('has', !!e.target.value); save(); } })));
-    const head = (s, i) => h('div', { class: 'lhead' }, h('small', {}, `Step ${i + 1}`),
-      h('input', { class: 'loname', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }));
-    const orch = (s, i) => h('div', { class: 'lcell mid' + (i < last ? ' arr' : '') },
-      pen(h('textarea', { class: 'lo', rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens', oninput: (e) => { s.does = e.target.value; save(); } })));
-    const ctl = (s, i) => h('div', { class: 'lctl' },
-      h('button', { class: 'x', title: 'Move left', 'aria-label': 'Move step left', disabled: i === 0, onclick: () => reorder(i, -1) }, '◀'),
-      h('button', { class: 'x', title: 'Delete step', 'aria-label': 'Delete step', onclick: () => { sc.steps.splice(i, 1); save(); renderStage(); } }, '×'),
-      h('button', { class: 'x', title: 'Move right', 'aria-label': 'Move step right', disabled: i === last, onclick: () => reorder(i, 1) }, '▶'));
     box.append(h('div', { class: 'scenhead' }, h('div', {}, h('h3', {}, sc.title), h('p', { class: 'hint' }, sc.tagline)), star(sc.title)),
-      h('p', { class: 'hint sop' }, 'Your reimagined SOP flow. The yellow Orchestration row is the new, AI-powered backbone bolted onto the classical steps — agents prepare the work, people decide where it matters. Edit any box, reorder with ◀ ▶, add or delete steps, then press "Regenerate with AI" to let the coach reorganise it.'),
-      h('div', { class: 'lanewrap' }, h('div', { class: 'lanes', style: `grid-template-columns:118px repeat(${sc.steps.length},minmax(150px,1fr))` },
-        h('div', { class: 'lcorner' }), sc.steps.map(head),
-        h('div', { class: 'lname' }, 'Human'), sc.steps.map(slot('human', '+ human', 'up')),
-        h('div', { class: 'lname o' }, 'Orchestration'), sc.steps.map(orch),
-        h('div', { class: 'lname' }, 'Agents'), sc.steps.map(slot('agent', '+ agent', 'down')),
-        h('div', { class: 'lfoot' }), sc.steps.map(ctl))),
-      h('button', { class: 'add', onclick: () => { sc.steps.push({ name: 'New step', does: '', agent: null, human: null }); save(); renderStage(); } }, '+ step'),
+      h('p', { class: 'hint sop' }, 'Your reimagined process on a whiteboard. Drag the background to move around, scroll to pan, ctrl/⌘ + scroll or + − to zoom. Drag any card by its header: left to right is the step order. Human cards sit above a step, agent cards below, and they move with it. Double-click empty space for a sticky note.'),
+      whiteboard(sc),
       h('div', { class: 'fgrid scmeta' }, h('div', {}, h('b', {}, 'Opportunity'), h('p', {}, sc.opportunity)), h('div', {}, h('b', {}, 'Why does this matter?'), h('p', {}, sc.value))),
       h('button', { class: 'add', onclick: () => { S.scenario = null; save(); renderStage(); } }, '↩ See other options'), bar);
     return box;

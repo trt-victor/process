@@ -1,5 +1,5 @@
 // Pure logic (no DOM) so it runs in the browser and in `node --test`.
-import { PILOT } from './content.js';
+import { PILOT, CASES } from './content.js';
 
 const PITCH = /\b(a\.?i\.?|artificial intelligence|agents?|agentic|llms?|gpt|chatgpt|copilot|claude|gemini|machine learning|rpa|bots?|chatbots?)\b/i;
 export const isPitch = (t) => PITCH.test(t || '');
@@ -48,6 +48,9 @@ export function buildScenario(S) {
 
 // Ready-made reimagined scenarios, always relevant to the chosen process. Three patterns applied to the current steps.
 export function scenarioPresets(S) {
+  // Cases with their own ready-made scenarios (the AI Foundry briefs) use those; copies, so editing one never changes the case.
+  const own = CASES.find((c) => c.id === S.caseId)?.scenarios;
+  if (own) return structuredClone(own);
   const names = (S.steps.length ? S.steps : [{ name: 'Intake' }, { name: 'Process' }, { name: 'Review' }, { name: 'Deliver' }]).map((s) => s.name);
   const base = S.caseName || focusName(S);
   const friction = zonesLike(S, 'fr:'), dream = zonesLike(S, 'dream_');

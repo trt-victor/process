@@ -395,3 +395,38 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 .ptabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 12px}
 .ptab{border:0;background:none;padding:8px 14px;font-weight:600;color:var(--grey);border-bottom:3px solid transparent;cursor:pointer}
 .ptab.on{color:var(--ink);border-bottom-color:var(--yellow)}
+/* Whiteboard (Reimagined scenario): a Miro-like board with pan, zoom and draggable cards */
+.wb{position:relative;height:600px;overflow:hidden;margin:12px 0 14px;border:1px solid var(--line);border-radius:12px;background-color:#fafafc;background-image:radial-gradient(#d6d6e2 1px,transparent 1px);background-size:22px 22px;touch-action:none;cursor:grab;user-select:none}
+.wb.panning{cursor:grabbing}
+.wbworld{position:absolute;left:0;top:0;transform-origin:0 0}
+.wblines{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
+.wblines .flow{fill:none;stroke:#1a1a24;stroke-width:2}
+.wblines .link{fill:none;stroke:#9a9aab;stroke-width:1.5;stroke-dasharray:5 5}
+.wbband{position:absolute;left:-6000px;width:14000px;height:170px;border-top:1px dashed var(--line2);pointer-events:none}
+.wbband.o{background:rgba(255,230,0,.08)}
+.wblabel{position:absolute;width:120px;text-align:right;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--grey2);pointer-events:none}
+.wbcard{position:absolute;width:200px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 16px -8px rgba(26,26,36,.3);display:flex;flex-direction:column;user-select:text;cursor:auto}
+.wbcard textarea{border:0;background:transparent;resize:none;min-height:60px;font-size:13px;line-height:1.35;padding:4px 30px 8px 10px;box-shadow:none}
+.wbcard textarea:focus{box-shadow:none}
+.wbhandle{display:flex;align-items:center;gap:6px;padding:5px 6px 3px 10px;cursor:move;user-select:none;touch-action:none}
+.wbhandle small{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--grey)}
+.wbhandle:focus-visible{outline:2px solid var(--violet);outline-offset:-2px;border-radius:8px 8px 0 0}
+.wbbtns{margin-left:auto;display:flex}
+.wbx{border:0;background:none;padding:0 5px;cursor:pointer;color:var(--grey);font-size:14px;line-height:1}
+.wbx:hover{color:var(--ink)}
+.wbtitle{border:0;background:transparent;font-weight:700;font-size:14px;padding:0 10px 2px;box-shadow:none}
+.wbtitle:focus{box-shadow:none}
+.wbstep{background:var(--yellow);box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 18px -8px rgba(245,200,0,.6)}
+.wbstep .wbhandle small{color:var(--ink2)}
+.wbhuman,.wbagent{background:#fff}
+.wbhuman{border-top:4px solid var(--violet)}
+.wbagent{border-top:4px solid var(--ink)}
+.wbnote{width:170px;border-radius:2px}
+.wbchip{position:absolute;white-space:nowrap;border:1px dashed var(--line2);background:#fff;border-radius:99px;padding:2px 12px;font-size:12px;color:var(--grey);cursor:pointer}
+.wbchip:hover{color:var(--ink);border-color:var(--ink)}
+.wbtools,.wbzoom{position:absolute;z-index:2;display:flex;gap:4px;background:#fff;border-radius:10px;padding:5px;box-shadow:0 2px 10px rgba(26,26,36,.15)}
+.wbtools{left:10px;top:10px;flex-direction:column}
+.wbzoom{right:10px;bottom:10px;align-items:center}
+.wbtools button,.wbzoom button{border:0;background:none;border-radius:6px;padding:5px 9px;font-weight:600;cursor:pointer}
+.wbtools button:hover,.wbzoom button:hover{background:var(--bg)}
+.wbzl{min-width:44px;text-align:center;font-size:12px;color:var(--grey)}

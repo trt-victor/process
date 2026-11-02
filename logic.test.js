@@ -105,3 +105,13 @@ test('a prompted process becomes steps', () => {
   const ok = L.parseProcess('{"name":"X","steps":["a","b","c"],"quotes":[{"q":"hi","s":[2,9]}],"probe":{"open":"o"}}');
   assert.deepEqual(ok.quotes[0].s, [2]); assert.equal(ok.probe, null);
 });
+
+test('client-brief cases bring their own scenarios, as copies', () => {
+  const s = S(); s.caseId = 'dragon';
+  const a = L.scenarioPresets(s), b = L.scenarioPresets(s);
+  assert.equal(a.length, 3);
+  assert.match(a[0].title, /Royal Dragon/);
+  a[0].steps[0].name = 'changed';
+  assert.notEqual(b[0].steps[0].name, 'changed');
+  assert.ok(CASES.filter((c) => c.scenarios).every((c) => c.scenarios.every((x) => x.steps.every((st) => st.name && st.does))));
+});
