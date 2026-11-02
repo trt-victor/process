@@ -441,6 +441,19 @@ function whiteboard(sc) {
     else { wbView.x -= e.deltaX; wbView.y -= e.deltaY; apply(); }
   }, { passive: false });
   const mid = (f) => zoomAt(f, vp.clientWidth / 2, vp.clientHeight / 2);
+  // Full screen: the browser's own full screen where it exists, otherwise the board fills the window (e.g. iPhone). Esc leaves either.
+  const isFull = () => document.fullscreenElement === vp || vp.classList.contains('wbfull');
+  const fullChanged = () => { const on = isFull(); full.textContent = on ? '✕ Exit full screen' : '⛶ Full screen'; full.setAttribute('aria-pressed', String(on)); requestAnimationFrame(fit); };
+  const full = h('button', { title: 'Show the whiteboard full screen', 'aria-pressed': 'false', onclick: () => {
+    if (document.fullscreenElement) return document.exitFullscreen();
+    if (vp.classList.contains('wbfull')) { vp.classList.remove('wbfull'); return fullChanged(); }
+    if (vp.requestFullscreen) vp.requestFullscreen().catch(() => { vp.classList.add('wbfull'); fullChanged(); });
+    else { vp.classList.add('wbfull'); fullChanged(); }
+  } }, '⛶ Full screen');
+  vp.addEventListener('fullscreenchange', fullChanged);
+  // The board moves by pan/zoom only: undo any scroll the browser does when focusing a card near the edge (older browsers without overflow: clip).
+  vp.addEventListener('scroll', () => { vp.scrollLeft = vp.scrollTop = 0; });
+  vp.addEventListener('keydown', (e) => { if (e.key === 'Escape' && vp.classList.contains('wbfull')) { vp.classList.remove('wbfull'); fullChanged(); } });
   vp.append(
     h('div', { class: 'wbtools', role: 'toolbar', 'aria-label': 'Whiteboard tools' },
       h('button', { title: 'Add a step at the end of the flow', onclick: addStep }, '+ Step'),
@@ -448,7 +461,8 @@ function whiteboard(sc) {
     h('div', { class: 'wbzoom', role: 'toolbar', 'aria-label': 'Zoom' },
       h('button', { 'aria-label': 'Zoom out', onclick: () => mid(1 / 1.2) }, '−'), zl,
       h('button', { 'aria-label': 'Zoom in', onclick: () => mid(1.2) }, '+'),
-      h('button', { title: 'Fit the whole board in view', onclick: fit }, 'Fit')));
+      h('button', { title: 'Fit the whole board in view', onclick: fit }, 'Fit'),
+      full));
   draw();
   requestAnimationFrame(() => (wbView ? apply() : fit()));
   return vp;

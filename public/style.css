@@ -396,7 +396,7 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 .ptab{border:0;background:none;padding:8px 14px;font-weight:600;color:var(--grey);border-bottom:3px solid transparent;cursor:pointer}
 .ptab.on{color:var(--ink);border-bottom-color:var(--yellow)}
 /* Whiteboard (Reimagined scenario): a Miro-like board with pan, zoom and draggable cards */
-.wb{position:relative;height:600px;overflow:hidden;margin:12px 0 14px;border:1px solid var(--line);border-radius:12px;background-color:#fafafc;background-image:radial-gradient(#d6d6e2 1px,transparent 1px);background-size:22px 22px;touch-action:none;cursor:grab;user-select:none}
+.wb{position:relative;height:600px;overflow:hidden;overflow:clip;margin:12px 0 14px;border:1px solid var(--line);border-radius:12px;background-color:#fafafc;background-image:radial-gradient(#d6d6e2 1px,transparent 1px);background-size:22px 22px;touch-action:none;cursor:grab;user-select:none}
 .wb.panning{cursor:grabbing}
 .wbworld{position:absolute;left:0;top:0;transform-origin:0 0}
 .wblines{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
@@ -430,3 +430,5 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 .wbtools button,.wbzoom button{border:0;background:none;border-radius:6px;padding:5px 9px;font-weight:600;cursor:pointer}
 .wbtools button:hover,.wbzoom button:hover{background:var(--bg)}
 .wbzl{min-width:44px;text-align:center;font-size:12px;color:var(--grey)}
+.wb:fullscreen{height:100vh;margin:0;border:0;border-radius:0}
+.wb.wbfull{position:fixed;inset:0;z-index:1000;height:auto;margin:0;border:0;border-radius:0}
