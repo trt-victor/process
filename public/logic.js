@@ -27,22 +27,40 @@ const zone = (S, id) => S.notes.filter((n) => n.zone === id && n.text.trim()).ma
 const zonesLike = (S, prefix) => S.notes.filter((n) => n.zone.startsWith(prefix) && n.text.trim()).map((n) => n.text.trim());
 export const focusName = (S) => S.steps.find((s) => s.id === S.focus)?.name || S.f.q_process || S.caseName || 'the process';
 
-// Offline scenario: one orchestration step per job-to-be-done, with a human and/or agent lane.
+// Offline scenario from the whole board. The current process steps are the backbone; each step's friction says what it must fix;
+// the jobs-to-be-done say who does the work (matched to steps by shared words); jobs a person must own that no step covers become
+// decision points; the start/end triggers, dream state and use cases give the frame and the headline.
 export function buildScenario(S) {
-  let jobs = (S.rows.jtbd || []).filter((r) => (r.job || '').trim());
-  if (!jobs.length) jobs = (S.f.q_now ? S.f.q_now.split('\n').filter((l) => l.trim()) : S.steps.map((s) => s.name)).map((job) => ({ job, who: 'both', why: '' }));
-  const mid = jobs.slice(0, 5).map((j) => ({
-    name: short(j.job, 28), does: (j.why || j.job).trim(),
-    agent: j.who !== 'human' ? short(j.job, 22) + ' agent' : null,
-    human: j.who === 'human' ? 'Does this step' : j.who === 'both' ? 'Reviews exceptions' : null,
-  }));
+  const jobs = (S.rows.jtbd || []).filter((r) => (r.job || '').trim());
   const friction = zonesLike(S, 'fr:'), dream = zonesLike(S, 'dream_');
+  // Words of 4+ letters, cut to 5 so "approve" meets "approval" and "exception" meets "exceptions".
+  const words = (t) => new Set(((t || '').toLowerCase().match(/[a-z]{4,}/g) || []).map((w) => w.slice(0, 5)));
+  const overlap = (a, b) => { const B = words(b); return [...words(a)].filter((w) => B.has(w)).length; };
+  const lane = (who, name) => ({ agent: who !== 'human' ? short(name, 22) + ' agent' : null, human: who === 'human' ? 'Does this step' : who === 'both' ? 'Reviews and decides' : null });
+  let mid;
+  if (S.steps.length) {
+    const used = new Set();
+    mid = S.steps.slice(0, 8).map((s) => {
+      const fr = zone(S, 'fr:' + s.id), about = [s.name, s.context, s.desc, ...fr].join(' ');
+      const job = jobs.filter((j) => !used.has(j)).map((j) => [j, overlap(`${j.job} ${j.why || ''}`, about)]).filter((x) => x[1]).sort((x, y) => y[1] - x[1])[0]?.[0];
+      if (job) used.add(job);
+      const does = fr.length ? 'Fixes: ' + fr.slice(0, 2).join('; ') : (job?.why || s.context || '').trim() || `AI prepares "${short(s.name, 24)}" and flags anything unclear.`;
+      return { name: short(s.name, 28), does, ...lane(job?.who || 'ai', s.name) };
+    });
+    for (const j of jobs) if (!used.has(j) && j.who === 'human') mid.push({ name: short(j.job, 28), does: (j.why || j.job).trim(), agent: null, human: 'Decides' });
+  } else {
+    const list = jobs.length ? jobs : (S.f.q_now ? S.f.q_now.split('\n').filter((l) => l.trim()) : []).map((job) => ({ job, who: 'both', why: '' }));
+    mid = list.slice(0, 6).map((j) => ({ name: short(j.job, 28), does: (j.why || j.job).trim(), ...lane(j.who, j.job) }));
+  }
+  const topUse = S.notes.filter((n) => n.zone === 'usecases' && n.text.trim()).sort((a, b) => (S.votes[b.id] || 0) - (S.votes[a.id] || 0))[0]?.text.trim();
+  const start = (S.f.start || '').trim(), end = (S.f.end || '').trim();
   return {
     title: `${focusName(S)}: reimagined flow`,
-    tagline: S.f.vb1 || dream[0] || 'Agents prepare, people decide.',
-    steps: [{ name: 'Trigger', does: `A new ${focusName(S).toLowerCase()} event arrives`, agent: 'Intake agent', human: null }, ...mid, { name: 'Finish', does: 'Outcome confirmed, audit trail stored', agent: null, human: null }],
+    tagline: S.f.vb1 || dream[0] || topUse || 'Agents prepare, people decide.',
+    steps: [{ name: 'Trigger', does: start || `A new ${focusName(S).toLowerCase()} case arrives`, agent: 'Intake agent', human: null }, ...mid,
+      { name: 'Finish', does: (end ? end + '. ' : '') + 'Outcome confirmed, audit trail stored', agent: null, human: null }],
     opportunity: friction.slice(0, 3).join(' · ') || S.f.q_pain || 'Add friction points in the first stage to sharpen this.',
-    value: dream.slice(0, 3).join(' · ') || S.f.vb1 || 'Add dream-state notes to sharpen this.',
+    value: dream.slice(0, 3).join(' · ') || S.f.vb1 || topUse || 'Add dream-state notes to sharpen this.',
   };
 }
 
@@ -104,7 +122,7 @@ export function parseScenario(text) {
     const o = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
     if (!o.title || !Array.isArray(o.steps) || !o.steps.length) return null;
     const s = (v) => (v == null ? null : String(v));
-    return { title: s(o.title), tagline: s(o.tagline) || '', opportunity: s(o.opportunity) || '', value: s(o.value) || '', steps: o.steps.slice(0, 8).map((x) => ({ name: s(x.name) || 'Step', does: s(x.does) || '', agent: s(x.agent), human: s(x.human) })) };
+    return { title: s(o.title), tagline: s(o.tagline) || '', opportunity: s(o.opportunity) || '', value: s(o.value) || '', steps: o.steps.slice(0, 12).map((x) => ({ name: s(x.name) || 'Step', does: s(x.does) || '', agent: s(x.agent), human: s(x.human) })) };
   } catch { return null; }
 }
 
@@ -112,6 +130,8 @@ export function snapshot(S, flow) {
   const out = [`Participant: ${S.name || 'n/a'} · Case: ${S.caseName} · Focus: ${focusName(S)}`];
   if (S.brief) out.push('Case brief: ' + S.brief);
   if (S.steps.length) out.push('Process steps: ' + S.steps.map((s) => s.name).join(' → '));
+  for (const s of S.steps) if ((s.desc || '').trim()) out.push(`Step "${s.name}": ${s.desc.trim()}`);
+  for (const q of S.quotes || []) out.push('Client says / case fact: ' + q.q);
   for (const st of flow.stages) for (const w of st.widgets) {
     if (w.type === 'fields' || w.type === 'promptcanvas') for (const f of w.fields) if ((S.f[f.id] || '').trim()) out.push(`${f.label}: ${S.f[f.id].trim()}`);
     if (w.type === 'rows') for (const r of S.rows[w.id] || []) { const v = w.cols.map((c) => r[c.id]).filter(Boolean); if (v.length > 1 || (v[0] && v[0] !== 'both')) out.push(`${w.title}: ${w.cols.map((c) => `${c.label}=${r[c.id] || '-'}`).join(' | ')}`); }
@@ -121,7 +141,12 @@ export function snapshot(S, flow) {
   for (const s of S.steps) if ((s.context || '').trim()) out.push(`Context for "${s.name}": ${s.context.trim()}`);
   const uc = S.notes.filter((n) => n.zone === 'usecases' && n.text.trim()).map((n) => `${n.text.trim()} (${S.votes[n.id] || 0} votes)`);
   if (uc.length) out.push('Use cases: ' + uc.join(' · '));
-  if (S.scenario) out.push(`Scenario "${S.scenario.title}": ` + S.scenario.steps.map((s) => s.name).join(' → '));
+  if (S.scenario) {
+    out.push(`Current scenario "${S.scenario.title}" (${S.scenario.tagline || ''}):`);
+    for (const s of S.scenario.steps) out.push(`  - ${s.name}: ${s.does || ''}${s.agent ? ` [agent: ${s.agent}]` : ''}${s.human ? ` [human: ${s.human}]` : ''}`);
+    const wn = (S.scenario.notes || []).map((n) => n.text.trim()).filter(Boolean);
+    if (wn.length) out.push('Whiteboard notes: ' + wn.join(' · '));
+  }
   const park = zone(S, 'parking'); if (park.length) out.push('Parking lot: ' + park.join(' · '));
   return out.join('\n');
 }
@@ -244,7 +269,14 @@ export const protoPrompt = (S, flow, change, prev) => `Build a working, clickabl
 ${snapshot(S, flow)}
 Prototype config: ${JSON.stringify(protoConfig(S))}${change ? `\n\nRequested change: ${change}\n\nCurrent prototype to modify:\n${prev}` : ''}`;
 
-export const scenarioPrompt = (S, flow) => `From the board below, write one reimagined AI-powered scenario for the focus step. Reply with only JSON: {"title": string, "tagline": string, "steps": [{"name": short orchestration step, "does": one sentence, "agent": agent name or null, "human": what a person does here or null}], "opportunity": 1-2 sentences, "value": 1-2 sentences}. 5 to 7 steps, starting with a trigger and ending with a finish state. Use only facts from the board; do not invent numbers.
+export const scenarioPrompt = (S, flow) => `Design the full reimagined, AI-powered end-to-end process for this team, using everything on their board below.
+
+Work it out before you answer (do not write this part down):
+1. Extract: the goal and what success looks like; every current process step with its owner, tools and where it slows; the friction points per step; the jobs-to-be-done and whether a human, AI or both should do each; the dream-state ideas; the constraints, risks, tensions and exceptions; the use cases and their votes; anything in the current scenario or whiteboard notes the team already shaped.
+2. Decide, per current step, what changes: what an agent takes over, where a person must still judge or decide (respect every human/both choice in the jobs), which friction it removes, and how exceptions are handled.
+3. Build one coherent flow from trigger to finish that covers the whole process (merge or split steps where it makes the flow clearer), with explicit human decision points and an exception path.
+
+Then reply with only JSON, no other text: {"title": string, "tagline": string, "steps": [{"name": short step name, "does": one sentence naming the friction it removes or the job it does, "agent": agent name or null, "human": what a person does here or null}], "opportunity": 1-2 sentences, "value": 1-2 sentences}. 6 to 10 steps, starting with a trigger and ending with a finish state. Use only facts from the board; do not invent numbers.
 
 ${snapshot(S, flow)}`;
 

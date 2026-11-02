@@ -307,15 +307,20 @@ const WB = { gap: 250, human: -200, agent: 200 };
 let wbView = null, wbSc = null; // pan/zoom survives re-renders of the same scenario; a new scenario starts fitted
 function whiteboard(sc) {
   if (wbSc !== sc) { wbSc = sc; wbView = null; }
-  sc.steps.forEach((s, i) => { if (!Number.isFinite(s.x)) { s.x = i * WB.gap; s.y = 0; } });
+  sc.steps.forEach((s, i) => { s.id ||= uid(); if (!Number.isFinite(s.x)) { s.x = i * WB.gap; s.y = 0; } });
   sc.notes ||= [];
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'wblines'); svg.setAttribute('aria-hidden', 'true');
-  const world = h('div', { class: 'wbworld' }), zl = h('span', { class: 'wbzl' });
+  const svgEl = () => { const e = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); e.setAttribute('class', 'wblines'); e.setAttribute('aria-hidden', 'true'); return e; };
+  const svg = svgEl(), tsvg = svgEl(), tmp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  tmp.setAttribute('class', 'flow temp'); tsvg.append(tmp);
+  const world = h('div', { class: 'wbworld' }), zl = h('span', { class: 'wbzl' }), overlay = h('div', { class: 'wbover' });
+  const autoBtn = h('button', { title: 'Let the arrows follow the step order again (left to right)', disabled: true, onclick: () => { delete sc.links; sel = null; save(); lines(); toast('Arrows follow the step order again.'); } }, '↺ Auto arrows');
   const vp = h('div', { class: 'wb', role: 'region', 'aria-label': 'Scenario whiteboard' }, world);
-  const apply = () => { if (!wbView) return; world.style.transform = `translate(${wbView.x}px,${wbView.y}px) scale(${wbView.z})`; zl.textContent = Math.round(wbView.z * 100) + '%'; };
+  // --iz lets the arrow controls keep their on-screen size at any zoom.
+  const apply = () => { if (!wbView) return; world.style.transform = `translate(${wbView.x}px,${wbView.y}px) scale(${wbView.z})`; world.style.setProperty('--iz', 1 / wbView.z); zl.textContent = Math.round(wbView.z * 100) + '%'; };
   const zoomAt = (f, cx, cy) => { const z = Math.min(2, Math.max(0.3, wbView.z * f)); wbView = { z, x: cx - (cx - wbView.x) * z / wbView.z, y: cy - (cy - wbView.y) * z / wbView.z }; apply(); };
   const fit = () => {
     const els = [...world.querySelectorAll('.wbcard')];
+    if (vp.isConnected && !vp.clientWidth) return requestAnimationFrame(fit); // not laid out yet: try again next frame
     if (!els.length || !vp.clientWidth) { wbView = { x: 160, y: 260, z: 1 }; return apply(); }
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const el of els) { x0 = Math.min(x0, el.offsetLeft); y0 = Math.min(y0, el.offsetTop); x1 = Math.max(x1, el.offsetLeft + el.offsetWidth); y1 = Math.max(y1, el.offsetTop + el.offsetHeight); }
@@ -330,19 +335,102 @@ function whiteboard(sc) {
   const att = { human: [], agent: [] }, stepEls = [];
   const place = (s, i) => { for (const k of ['human', 'agent']) { const el = att[k][i]; if (el) pos(el, ...at(s, k, el.classList.contains('wbchip'))); } };
 
+  // Arrows. Until the team edits one, they simply follow the step order (left to right). The first edit (reverse, remove,
+  // draw, insert) turns them into the team's own list, sc.links, of { from, to } card ids; "Auto arrows" goes back.
+  let sel = null, from = null; // the selected arrow, and the card an arrow is being drawn from (click-to-connect)
+  const autoLinks = () => sc.steps.slice(1).map((s, i) => ({ from: sc.steps[i].id, to: s.id }));
+  const own = () => (sc.links ||= autoLinks());
+  const same = (a, b) => !!a && !!b && a.from === b.from && a.to === b.to;
+  const stepOf = (id) => sc.steps.find((s) => s.id === id);
+  const boxOf = (id) => { const el = world.querySelector(`[data-node="${CSS.escape(id)}"]`); return el && { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }; };
+  const unlink = (pred) => { if (sc.links) sc.links = sc.links.filter((l) => !pred(l.from) && !pred(l.to)); };
+  const link = (a, b) => { const L = own(); if (a !== b && !L.some((l) => l.from === a && l.to === b)) L.push({ from: a, to: b }); save(); lines(); toast('Arrow added.'); };
+  // Curve from the side of a that faces b to the facing side of b; returns the path and its midpoint.
+  const edge = (a, b) => {
+    const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
+    let p1, p2, c1, c2;
+    if (Math.abs(by - ay) < Math.max(a.h, b.h) && Math.abs(bx - ax) > a.w + b.w) {
+      // Same row but not neighbours: arc over the cards in between instead of running behind them.
+      const k = Math.min(180, 50 + Math.abs(bx - ax) / 5);
+      p1 = [ax, a.y]; p2 = [bx, b.y - 4]; c1 = [ax, a.y - k]; c2 = [bx, b.y - k];
+    } else if (Math.abs(bx - ax) >= Math.abs(by - ay)) {
+      const d = Math.sign(bx - ax) || 1, k = Math.max(40, Math.abs(bx - ax) / 3);
+      p1 = [d > 0 ? a.x + a.w : a.x, ay]; p2 = [d > 0 ? b.x - 4 : b.x + b.w + 4, by]; c1 = [p1[0] + d * k, p1[1]]; c2 = [p2[0] - d * k, p2[1]];
+    } else {
+      const d = Math.sign(by - ay) || 1, k = Math.max(30, Math.abs(by - ay) / 3);
+      p1 = [ax, d > 0 ? a.y + a.h : a.y]; p2 = [bx, d > 0 ? b.y - 4 : b.y + b.h + 4]; c1 = [p1[0], p1[1] + d * k]; c2 = [p2[0], p2[1] - d * k];
+    }
+    return { d: `M${p1}C${c1} ${c2} ${p2}`, mid: [0, 1].map((j) => (p1[j] + 3 * c1[j] + 3 * c2[j] + p2[j]) / 8) };
+  };
+  const reverse = (l) => { const L = own().find((x) => same(x, l)); if (L) [L.from, L.to] = [L.to, L.from]; sel = L ? { ...L } : null; save(); lines(); };
+  const remove = (l) => { sc.links = own().filter((x) => !same(x, l)); sel = null; save(); lines(); };
+  const insert = (l) => {
+    const A = stepOf(l.from), B = stepOf(l.to); if (!A || !B) return;
+    const n = { id: uid(), name: 'New step', does: '', agent: null, human: null, x: A.x + WB.gap, y: A.y };
+    for (const s of sc.steps) if (s !== A && s.x >= n.x - WB.gap / 2) s.x += WB.gap; // make room to the right
+    sc.steps.push(n); sc.steps.sort((a, b) => a.x - b.x);
+    if (sc.links) { sc.links = sc.links.filter((x) => !same(x, l)); sc.links.push({ from: A.id, to: n.id }, { from: n.id, to: B.id }); }
+    sel = null; save(); draw(); world.querySelector(`[data-node="${n.id}"] .wbtitle`)?.select();
+  };
   const lines = () => {
-    const b = (el) => ({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
-    let d = '<defs><marker id="wbarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#1a1a24"/></marker></defs>';
+    let d = '<defs>' + ['', 's'].map((k) => `<marker id="wbarr${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="${k ? '#7b61ff' : '#1a1a24'}"/></marker>`).join('') + '</defs>';
+    const over = [];
+    (sc.links || autoLinks()).forEach((l) => {
+      const a = boxOf(l.from), b = boxOf(l.to); if (!a || !b) return;
+      const e = edge(a, b), on = same(l, sel), A = stepOf(l.from), B = stepOf(l.to);
+      d += `<path class="flow${on ? ' sel' : ''}" d="${e.d}" marker-end="url(#wbarr${on ? 's' : ''})"/><path class="hit" data-from="${l.from}" data-to="${l.to}" d="${e.d}"/>`;
+      const at = `left:${e.mid[0]}px;top:${e.mid[1]}px`;
+      if (on) over.push(h('div', { class: 'wbseltools', style: at, role: 'toolbar', 'aria-label': 'Arrow' },
+        h('button', { onclick: () => reverse(l) }, '⇄ Reverse'),
+        A && B && h('button', { onclick: () => insert(l) }, '+ Step here'),
+        h('button', { onclick: () => remove(l) }, '✕ Remove')));
+      else over.push(h('button', { class: 'wbmid', style: at, title: A && B ? 'Insert a step here (R reverses the arrow, Delete removes it)' : 'Arrow options',
+        'aria-label': A && B ? `Insert a step between ${A.name} and ${B.name}. R reverses this arrow, Delete removes it.` : 'Arrow options. R reverses this arrow, Delete removes it.', 'aria-keyshortcuts': 'R Delete',
+        onclick: () => { if (A && B) insert(l); else { sel = { ...l }; lines(); } },
+        onkeydown: (ev) => { if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); reverse(l); } else if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); remove(l); } } }, A && B ? '+' : '•'));
+    });
     stepEls.forEach((el, i) => {
-      const a = b(el), n = stepEls[i + 1] && b(stepEls[i + 1]);
-      if (n) { const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = n.x - 4, y2 = n.y + n.h / 2, c = Math.max(40, Math.abs(x2 - x1) / 2); d += `<path class="flow" d="M${x1} ${y1}C${x1 + c} ${y1},${x2 - c} ${y2},${x2} ${y2}" marker-end="url(#wbarr)"/>`; }
+      const a = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
       for (const k of ['human', 'agent']) {
         const e = att[k][i]; if (!e || e.classList.contains('wbchip')) continue;
-        const c = b(e), up = k === 'human';
+        const c = { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }, up = k === 'human';
         d += `<path class="link" d="M${a.x + a.w / 2} ${up ? a.y : a.y + a.h}L${c.x + c.w / 2} ${up ? c.y + c.h : c.y}"/>`;
       }
     });
-    svg.innerHTML = d;
+    svg.innerHTML = d; overlay.replaceChildren(...over); autoBtn.disabled = !sc.links;
+  };
+  svg.addEventListener('pointerdown', (e) => { const t = e.target.closest('.hit'); if (!t) return; e.stopPropagation(); sel = { from: t.dataset.from, to: t.dataset.to }; lines(); });
+  const connectClick = (node) => {
+    world.querySelectorAll('.wbport.on').forEach((p) => p.classList.remove('on'));
+    if (from && from !== node) { const a = from; from = null; vp.classList.remove('connecting'); return link(a, node); }
+    if (from === node) { from = null; vp.classList.remove('connecting'); return; }
+    from = node; vp.classList.add('connecting');
+    world.querySelector(`[data-node="${CSS.escape(node)}"] > .wbport`)?.classList.add('on');
+    toast('Now click the ● on the card the arrow should point to (Esc cancels).');
+  };
+  // The ● on each card: drag it onto another card to draw an arrow, or click it and then the other card's ●.
+  const port = (node, label) => {
+    let moved = false;
+    const b = h('button', { class: 'wbport', title: 'Drag to another card to draw an arrow, or click here and then on the other card\'s ●', 'aria-label': 'Draw an arrow from ' + label,
+      onclick: () => { if (moved) { moved = false; return; } connectClick(node); } });
+    b.addEventListener('pointerdown', (e) => {
+      if (e.button) return;
+      e.stopPropagation(); b.setPointerCapture(e.pointerId); moved = false;
+      const sx = e.clientX, sy = e.clientY;
+      const mv = (ev) => {
+        if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+        moved = true; const r = vp.getBoundingClientRect(), a = boxOf(node);
+        tmp.setAttribute('d', `M${a.x + a.w} ${a.y + a.h / 2}L${(ev.clientX - r.left - wbView.x) / wbView.z} ${(ev.clientY - r.top - wbView.y) / wbView.z}`);
+      };
+      const up = (ev) => {
+        b.removeEventListener('pointermove', mv); b.removeEventListener('pointerup', up); b.removeEventListener('pointercancel', up); tmp.setAttribute('d', '');
+        if (!moved) return;
+        const t = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-node]');
+        if (t && t.dataset.node !== node) link(node, t.dataset.node);
+      };
+      b.addEventListener('pointermove', mv); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+    });
+    return b;
   };
   // Drag by a handle with the pointer, or nudge with the arrow keys. start() captures the starting state and returns { move(dx, dy), end() }.
   const draggable = (handle, start) => {
@@ -363,9 +451,9 @@ function whiteboard(sc) {
   const handle = (label, aria, ...btns) => h('div', { class: 'wbhandle', tabindex: 0, role: 'button', 'aria-label': aria + ': drag, or use the arrow keys to move' }, h('small', {}, label), h('span', { class: 'wbbtns' }, btns));
 
   const stepCard = (s, i) => {
-    const el = h('div', { class: 'wbcard wbstep' });
-    const hd = handle(`Step ${i + 1}`, `Step ${i + 1}, ${s.name}`, h('button', { class: 'wbx', title: 'Delete step', 'aria-label': 'Delete step ' + s.name, onclick: () => { sc.steps.splice(sc.steps.indexOf(s), 1); save(); draw(); } }, '×'));
-    el.append(hd, h('input', { class: 'wbtitle', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }),
+    const el = h('div', { class: 'wbcard wbstep', 'data-node': s.id });
+    const hd = handle(`Step ${i + 1}`, `Step ${i + 1}, ${s.name}`, h('button', { class: 'wbx', title: 'Delete step', 'aria-label': 'Delete step ' + s.name, onclick: () => { sc.steps.splice(sc.steps.indexOf(s), 1); unlink((x) => x === s.id || x.startsWith(s.id + ':')); save(); draw(); } }, '×'));
+    el.append(hd, port(s.id, s.name), h('input', { class: 'wbtitle', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }),
       pen(h('textarea', { rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens in ' + s.name, oninput: (e) => { s.does = e.target.value; save(); } })));
     pos(el, s.x, s.y);
     draggable(hd, () => {
@@ -382,9 +470,9 @@ function whiteboard(sc) {
       pos(chip, ...at(s, k, true));
       return (att[k][i] = chip);
     }
-    const el = h('div', { class: `wbcard wb${k}`, 'data-att': k + i });
-    const hd = handle(label, `${label} for ${s.name}`, h('button', { class: 'wbx', title: 'Remove', 'aria-label': `Remove ${label.toLowerCase()} from ${s.name}`, onclick: () => { s[k] = null; delete s[k + 'dx']; delete s[k + 'dy']; save(); draw(); } }, '×'));
-    el.append(hd, pen(h('textarea', { rows: 2, value: s[k], placeholder: k === 'human' ? 'What a person does here…' : 'What the agent does…', 'aria-label': `${label} in ${s.name}`, oninput: (e) => { s[k] = e.target.value; save(); } })));
+    const el = h('div', { class: `wbcard wb${k}`, 'data-att': k + i, 'data-node': `${s.id}:${k}` });
+    const hd = handle(label, `${label} for ${s.name}`, h('button', { class: 'wbx', title: 'Remove', 'aria-label': `Remove ${label.toLowerCase()} from ${s.name}`, onclick: () => { s[k] = null; delete s[k + 'dx']; delete s[k + 'dy']; unlink((x) => x === `${s.id}:${k}`); save(); draw(); } }, '×'));
+    el.append(hd, port(`${s.id}:${k}`, `${label.toLowerCase()} of ${s.name}`), pen(h('textarea', { rows: 2, value: s[k], placeholder: k === 'human' ? 'What a person does here…' : 'What the agent does…', 'aria-label': `${label} in ${s.name}`, oninput: (e) => { s[k] = e.target.value; save(); } })));
     pos(el, ...at(s, k));
     draggable(hd, () => {
       const dx0 = s[k + 'dx'] || 0, dy0 = s[k + 'dy'] ?? WB[k];
@@ -393,11 +481,11 @@ function whiteboard(sc) {
     return (att[k][i] = el);
   };
   const noteCard = (n) => {
-    const el = h('div', { class: 'wbcard wbnote c-' + n.color });
+    const el = h('div', { class: 'wbcard wbnote c-' + n.color, 'data-node': n.id });
     const hd = handle('Note', 'Sticky note',
       h('button', { class: 'wbx', title: 'Change colour', 'aria-label': 'Change colour', onclick: () => { n.color = COLORS[(COLORS.indexOf(n.color) + 1) % COLORS.length]; el.className = 'wbcard wbnote c-' + n.color; save(); } }, '◐'),
-      h('button', { class: 'wbx', title: 'Delete note', 'aria-label': 'Delete note', onclick: () => { sc.notes = sc.notes.filter((x) => x !== n); save(); draw(); } }, '×'));
-    el.append(hd, pen(h('textarea', { rows: 3, value: n.text, placeholder: 'Type here…', 'aria-label': 'Sticky note', oninput: (e) => { n.text = e.target.value; save(); } })));
+      h('button', { class: 'wbx', title: 'Delete note', 'aria-label': 'Delete note', onclick: () => { sc.notes = sc.notes.filter((x) => x !== n); unlink((x) => x === n.id); save(); draw(); } }, '×'));
+    el.append(hd, port(n.id, 'sticky note'), pen(h('textarea', { rows: 3, value: n.text, placeholder: 'Type here…', 'aria-label': 'Sticky note', oninput: (e) => { n.text = e.target.value; save(); } })));
     pos(el, n.x, n.y);
     draggable(hd, () => { const x = n.x, y = n.y; return { move: (dx, dy) => { n.x = x + dx; n.y = y + dy; pos(el, n.x, n.y); }, end: save }; });
     el.dataset.note = n.id;
@@ -409,7 +497,7 @@ function whiteboard(sc) {
     const minX = sc.steps.length ? Math.min(...sc.steps.map((s) => s.x)) : 0;
     const lane = (top, label, cls) => [h('div', { class: 'wbband' + cls, style: `top:${top}px` }), h('div', { class: 'wblabel', style: `left:${minX - 140}px;top:${top + 70}px` }, label)];
     world.replaceChildren(svg, ...lane(WB.human - 20, 'Human', ''), ...lane(-20, 'Orchestration', ' o'), ...lane(WB.agent - 20, 'Agents', ''),
-      ...sc.steps.flatMap((s, i) => [stepCard(s, i), attached(s, i, 'human'), attached(s, i, 'agent')]), ...sc.notes.map(noteCard));
+      ...sc.steps.flatMap((s, i) => [stepCard(s, i), attached(s, i, 'human'), attached(s, i, 'agent')]), ...sc.notes.map(noteCard), overlay, tsvg);
     requestAnimationFrame(lines);
   };
   const center = () => ({ x: (vp.clientWidth / 2 - wbView.x) / wbView.z, y: (vp.clientHeight / 2 - wbView.y) / wbView.z });
@@ -419,13 +507,15 @@ function whiteboard(sc) {
   };
   const addStep = () => {
     const last = sc.steps[sc.steps.length - 1];
-    sc.steps.push({ name: 'New step', does: '', agent: null, human: null, x: last ? last.x + WB.gap : 0, y: last ? last.y : 0 });
+    const n = { id: uid(), name: 'New step', does: '', agent: null, human: null, x: last ? last.x + WB.gap : 0, y: last ? last.y : 0 };
+    sc.steps.push(n); if (sc.links && last) sc.links.push({ from: last.id, to: n.id });
     save(); draw(); requestAnimationFrame(fit);
   };
 
   // Pan: drag the empty background. Double-click it for a sticky note. Wheel pans; ctrl/⌘ + wheel (and trackpad pinch) zooms.
   vp.addEventListener('pointerdown', (e) => {
     if (e.button || e.target !== vp) return;
+    if (sel) { sel = null; lines(); }
     vp.setPointerCapture(e.pointerId); vp.classList.add('panning');
     const sx = e.clientX, sy = e.clientY, vx = wbView.x, vy = wbView.y;
     const mv = (ev) => { wbView.x = vx + ev.clientX - sx; wbView.y = vy + ev.clientY - sy; apply(); };
@@ -453,11 +543,17 @@ function whiteboard(sc) {
   vp.addEventListener('fullscreenchange', fullChanged);
   // The board moves by pan/zoom only: undo any scroll the browser does when focusing a card near the edge (older browsers without overflow: clip).
   vp.addEventListener('scroll', () => { vp.scrollLeft = vp.scrollTop = 0; });
-  vp.addEventListener('keydown', (e) => { if (e.key === 'Escape' && vp.classList.contains('wbfull')) { vp.classList.remove('wbfull'); fullChanged(); } });
+  vp.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (from) { from = null; vp.classList.remove('connecting'); world.querySelectorAll('.wbport.on').forEach((p) => p.classList.remove('on')); return; }
+    if (sel) { sel = null; return lines(); }
+    if (vp.classList.contains('wbfull')) { vp.classList.remove('wbfull'); fullChanged(); }
+  });
   vp.append(
     h('div', { class: 'wbtools', role: 'toolbar', 'aria-label': 'Whiteboard tools' },
       h('button', { title: 'Add a step at the end of the flow', onclick: addStep }, '+ Step'),
-      h('button', { title: 'Add a sticky note in the middle of the view', onclick: () => addNote() }, '+ Sticky')),
+      h('button', { title: 'Add a sticky note in the middle of the view', onclick: () => addNote() }, '+ Sticky'),
+      autoBtn),
     h('div', { class: 'wbzoom', role: 'toolbar', 'aria-label': 'Zoom' },
       h('button', { 'aria-label': 'Zoom out', onclick: () => mid(1 / 1.2) }, '−'), zl,
       h('button', { 'aria-label': 'Zoom in', onclick: () => mid(1.2) }, '+'),
@@ -627,9 +723,10 @@ const W = {
     const gen = async (useAI) => {
       status.textContent = 'Drafting…';
       let sc = null;
-      if (useAI) try { let t = ''; await stream({ system: 'You write concise process scenarios as strict JSON.', messages: [{ role: 'user', content: L.scenarioPrompt(S, flow()) }], effort: 'medium', json: true }, (d) => { t += d; status.textContent = `Drafting… ${t.length} chars`; }); sc = L.parseScenario(t); } catch { /* fall through to the offline draft */ }
+      if (useAI) try { let t = ''; await stream({ system: 'You write concise process scenarios as strict JSON.', messages: [{ role: 'user', content: L.scenarioPrompt(S, flow()) }], effort: 'high', json: true }, (d) => { t += d; status.textContent = `Drafting… ${t.length} chars`; }); sc = L.parseScenario(t); } catch { /* fall through to the offline draft */ }
       if (!sc && useAI) toast('The coach model did not answer, so this is the offline draft.');
-      S.scenario = sc || L.buildScenario(S); save(); renderStage();
+      const notes = S.scenario?.notes; // the team's whiteboard stickies survive a redraft
+      S.scenario = sc || L.buildScenario(S); if (notes?.length) S.scenario.notes = notes; save(); renderStage();
     };
     const status = h('span', { class: 'hint', role: 'status' });
     const bar = h('div', { class: 'bar' }, AI && h('button', { class: 'primary', onclick: () => gen(true) }, S.scenario ? 'Regenerate with AI' : 'Generate with AI'), h('button', { class: AI ? 'add' : 'primary', onclick: () => gen(false) }, S.scenario ? 'Redraft from my board' : 'Draft from my board'), status);

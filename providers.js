@@ -44,7 +44,7 @@ export const providers = {
       const client = key ? new Anthropic({ apiKey: key }) : new Anthropic();
       const s = client.beta.messages.stream({
         model: CLAUDE_MODEL, max_tokens: 32000, system, messages,
-        output_config: { effort: effort === 'medium' ? 'medium' : 'low' },
+        output_config: { effort: ['medium', 'high'].includes(effort) ? effort : 'low' },
         betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', // on a safety refusal, the API retries on a fallback model
       });
       for await (const ev of s) if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') yield ev.delta.text;

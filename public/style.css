@@ -432,3 +432,18 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 .wbzl{min-width:44px;text-align:center;font-size:12px;color:var(--grey)}
 .wb:fullscreen{height:100vh;margin:0;border:0;border-radius:0}
 .wb.wbfull{position:fixed;inset:0;z-index:1000;height:auto;margin:0;border:0;border-radius:0}
+/* Whiteboard arrows: select, reverse, remove, insert a step, and draw new ones from a card's ● */
+.wblines .hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
+.wblines .flow.sel{stroke:var(--violet);stroke-width:3}
+.wblines .flow.temp{stroke:var(--violet);stroke-dasharray:6 4}
+.wbover{position:absolute;left:0;top:0}
+.wbmid{position:absolute;z-index:3;transform:translate(-50%,-50%) scale(var(--iz,1));width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line2);background:#fff;font-weight:700;line-height:1;color:var(--grey);cursor:pointer;opacity:.75}
+.wbmid:hover,.wbmid:focus-visible{opacity:1;color:var(--ink);border-color:var(--ink)}
+.wbseltools{position:absolute;z-index:3;transform:translate(-50%,-130%) scale(var(--iz,1));transform-origin:50% 100%;display:flex;gap:2px;background:var(--ink);border-radius:8px;padding:3px;box-shadow:0 4px 12px rgba(26,26,36,.3);white-space:nowrap}
+.wbseltools button{border:0;background:none;color:#fff;font-size:12px;padding:4px 8px;border-radius:5px;cursor:pointer}
+.wbseltools button:hover{background:rgba(255,255,255,.15)}
+.wbport{position:absolute;z-index:2;right:-9px;top:50%;transform:translateY(-50%) scale(var(--iz,1));width:18px;height:18px;padding:0;border-radius:50%;border:2px solid #fff;background:var(--violet);cursor:crosshair;opacity:0;transition:opacity .15s;touch-action:none}
+.wbcard:hover>.wbport,.wbport:focus-visible,.wbport.on,.wb.connecting .wbport{opacity:1}
+.wbport.on{box-shadow:0 0 0 4px rgba(123,97,255,.3)}
+@media (hover:none){.wbport{opacity:1}}
+.wbtools button:disabled{opacity:.4;cursor:default}
