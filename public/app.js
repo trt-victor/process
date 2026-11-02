@@ -44,6 +44,7 @@ function markUrl() {
 const uid = () => Math.random().toString(36).slice(2, 9);
 let AI = false, PROV = {}, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, home = false, live = [];
 let custom = [];
+let protoBuilding = false;
 try { custom = JSON.parse(localStorage.getItem(CKEY)) || []; } catch { /* no saved processes */ }
 
 // Tiny DOM builder; text always goes in as text nodes, never as HTML.
@@ -62,9 +63,10 @@ function h(tag, attrs = {}, ...kids) {
 const $ = (id) => document.getElementById(id);
 const flow = () => {
   const f = FLOWS[S.mode];
-  if (!f || !PILOT.hidePrioritize) return f;
-  // Hide the Prioritize stage for the pilot (its voting now lives on the Scenario tab); data is kept in content.js for future sessions.
-  return { ...f, stages: f.stages.filter((s) => s.id !== 'prioritize') };
+  if (!f) return f;
+  // Pilot: hide the Prioritize stage (its voting now lives on the Scenario tab) and one of the two Deep Dive pages; data is kept in content.js for future sessions.
+  const hide = [PILOT.hidePrioritize && 'prioritize', PILOT.hideDeepDiveCanvas ? 'deep' : 'deepProto'];
+  return { ...f, stages: f.stages.filter((s) => !hide.includes(s.id)) };
 };
 const stage = () => { const ss = flow().stages; return ss[Math.min(S.stage, ss.length - 1)]; };
 const total = () => Object.values(S.score).reduce((a, b) => a + b, 0);
@@ -502,22 +504,27 @@ const W = {
     return box;
   },
 
-  prototype: () => {
-    const status = h('span', { class: 'hint', role: 'status' });
+  // w.auto: no canvas on the page, so the prototype builds itself from the earlier pages the first time the page opens.
+  prototype: (w) => {
+    const status = h('span', { class: 'hint', role: 'status' }, protoBuilding ? 'Building…' : '');
     const change = h('input', { placeholder: 'Describe a change, e.g. "add a filter for high-risk cases"', 'aria-label': 'Change request' });
     const build = async (req) => {
-      status.textContent = 'Building…';
+      if (protoBuilding) return;
+      protoBuilding = true; status.textContent = 'Building…';
       let html = '';
       if (AI) try { await stream({ system: 'You build small, self-contained HTML prototypes.', messages: [{ role: 'user', content: L.protoPrompt(S, flow(), req, req && S.proto) }], effort: 'medium' }, (d) => { html += d; status.textContent = `Building… ${html.length} chars`; }); html = L.stripFences(html); } catch { html = ''; }
       if (!/<html|<!doctype/i.test(html)) { if (AI) toast('The model did not return a prototype, so this is the built-in simulation.'); html = L.buildPrototype(S); }
-      S.proto = html; save(); renderStage();
+      protoBuilding = false; S.proto = html; save(); renderStage();
     };
+    if (w.auto && !S.proto && !protoBuilding) setTimeout(() => build());
     const dl = (name, text, type) => { const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name }); a.click(); URL.revokeObjectURL(a.href); };
     return h('div', { class: 'panel' }, h('h3', {}, 'Working prototype'),
-      h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: () => build() }, S.proto ? 'Rebuild from canvas' : '⚡ Build my prototype'),
+      h('div', { class: 'bar' }, w.auto ? S.proto && h('button', { class: 'primary', onclick: () => build() }, 'Rebuild from earlier pages')
+        : h('button', { class: 'primary', onclick: () => build() }, S.proto ? 'Rebuild from canvas' : '⚡ Build my prototype'),
         S.proto && h('button', { class: 'add', onclick: () => dl('prototype.html', S.proto, 'text/html') }, 'Download .html'),
         h('button', { class: 'add', onclick: replitDialog }, '⬇ Replit prompt (.md)'), status),
-      h('p', { class: 'hint' }, '“Build my prototype” creates a clickable preview right here in your browser (sandboxed, no internet) that you can download as an .html file — it does not create a Replit project. To build in Replit, use “Replit prompt (.md)” and paste it into Replit AI.'),
+      w.auto ? h('p', { class: 'hint' }, AI ? 'Built by AI from everything your team filled in on the earlier pages. It runs right here in your browser (sandboxed, no internet). To build it as a full app, use “Replit prompt (.md)” and paste it into Replit AI.' : 'Built from everything your team filled in on the earlier pages. Connect a model (⚙ in the coach panel) to have AI build a custom prototype. To build it in Replit, use “Replit prompt (.md)” and paste it into Replit AI.')
+      : h('p', { class: 'hint' }, '“Build my prototype” creates a clickable preview right here in your browser (sandboxed, no internet) that you can download as an .html file — it does not create a Replit project. To build in Replit, use “Replit prompt (.md)” and paste it into Replit AI.'),
       // Sandboxed without same-origin, and no network: generated code cannot reach this app's storage or the internet.
       S.proto && h('iframe', { class: 'proto', title: 'Prototype preview', sandbox: 'allow-scripts', srcdoc: `<meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob:">` + S.proto }),
       S.proto && AI && h('div', { class: 'bar' }, change, h('button', { class: 'add', onclick: () => change.value.trim() && build(change.value.trim()) }, 'Apply change')),

@@ -9,12 +9,13 @@ export const PILOT = {
   hideSignalsArcade: true,   // the "Signals" and "Arcade" buttons in the stage toolbar
   hideDesignQuestions: true, // the "Design questions for the chosen use case" box in Prioritize
   hidePrioritize: true,      // the whole Prioritize stage (its use-case voting now lives on the Scenario tab)
-  stepFocusStar: false,      // the ☆ star-to-focus control in the process overview box
+  stepFocusStar: false,
+  hideDeepDiveCanvas: true,  // the original Deep Dive & Prototype page (prompt canvas + build button); its duplicate shows only the AI pre-filled prototype      // the ☆ star-to-focus control in the process overview box
 };
 
 // Breakout format shown next to each stage's explanation. Keyed by stage id (deepDive id is 'deep').
 export const BREAKOUT = {
-  today: 'Groups', jobs: 'Groups', dream: 'Groups', scenario: 'Pairs', prioritize: 'Groups', deep: 'Pairs', present: 'Groups',
+  today: 'Groups', jobs: 'Groups', dream: 'Groups', scenario: 'Pairs', prioritize: 'Groups', deep: 'Pairs', deepProto: 'Pairs', present: 'Groups',
   spot: 'Pairs', rethink: 'Pairs',
   why: 'Plenary', hunt: 'Individual', probe: 'Pairs', card: 'Individual', tell: 'Individual',
 };
@@ -133,6 +134,18 @@ const deepDive = {
   ],
 };
 
+// Duplicate of the Deep Dive page without the prompt canvas: the prototype is built automatically from everything filled in on the earlier pages.
+const deepProto = {
+  ...deepDive, id: 'deepProto',
+  objective: 'Bring the selected scenario to life. Your prototype is already built from everything you filled in on the earlier pages: explore it, test it as the primary user and refine it.',
+  steps: [
+    { t: 'Explore the prototype', mins: 10, d: 'It is pre-filled from your process, jobs, dream state and scenario. Click through it as the primary user.' },
+    { t: 'Test and refine', mins: 10, d: 'What is missing or wrong? Describe a change in plain language and apply it.' },
+    { t: 'Take it to Replit', mins: 5, d: 'Download the Replit prompt to rebuild it as a full app in Replit, or download the .html to share.' },
+  ],
+  widgets: [{ type: 'prototype', auto: true }],
+};
+
 const full = [
   {
     id: 'today', title: "Today's Reality", mins: 25,
@@ -240,6 +253,7 @@ const full = [
     ],
   },
   deepDive,
+  deepProto,
   {
     id: 'present', title: 'Present Back', mins: 15,
     objective: 'Prepare a 5-minute report-out that tells the story of your journey from challenge to solution: your reimagined process, key insights, recommendations and future opportunities.',
@@ -317,6 +331,7 @@ const quick = [
     ],
   },
   deepDive,
+  deepProto,
 ];
 
 const debrief = (id, a, b) => ({ type: 'fields', title: 'Debrief: play first, then reflect', fields: [{ id: id + '1', label: a }, { id: id + '2', label: b }] });
