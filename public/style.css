@@ -447,3 +447,8 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 .wbport.on{box-shadow:0 0 0 4px rgba(123,97,255,.3)}
 @media (hover:none){.wbport{opacity:1}}
 .wbtools button:disabled{opacity:.4;cursor:default}
+/* Coach: a board photo waiting to be added */
+.photoplan{display:flex;flex-direction:column;gap:6px;max-width:100%}
+.photoplan img{width:100%;max-height:160px;object-fit:cover;border-radius:8px}
+.photoplan ul{margin:0;padding-left:18px;max-height:220px;overflow:auto;font-size:12.5px}
+.photoplan .bar{margin:4px 0 0}

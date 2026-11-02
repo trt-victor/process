@@ -52,6 +52,17 @@ export async function handwriting(req, res) {
   }
 }
 
+// Photo of a physical board (from the coach) -> the model's mapping of its sticky notes onto this stage, as JSON text.
+export async function photo(req, res) {
+  if (req.method !== 'POST') return send(res, 405, 'POST only');
+  const b = await read(req, res, 5_000_000); if (!b) return;
+  if (typeof b.image !== 'string' || typeof b.prompt !== 'string' || b.prompt.length > 30_000) return send(res, 400, 'Bad request');
+  try { json(res, 200, { text: await providers.anthropic.readBoard({ image: b.image, prompt: b.prompt, key: userKey(req) }) }); } catch (e) {
+    console.error('photo error:', e.status ?? '', e.message);
+    send(res, e.status === 400 || e.status === 401 ? e.status : 502, 'Could not read the photo');
+  }
+}
+
 // Session board + chat history: GET ?id=<uuid> loads, PUT { id, state } saves.
 export async function state(req, res) {
   if (!store) return send(res, 501, 'No server storage configured');

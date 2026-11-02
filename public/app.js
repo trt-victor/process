@@ -880,7 +880,7 @@ function renderStage() {
   const go = (d) => { S.stage = Math.min(n - 1, Math.max(0, S.stage + d)); save(); resetTimer(); renderStage(); scrollTo(0, 0); };
   const jump = (i) => { if (i === S.stage) return; S.stage = Math.min(n - 1, Math.max(0, i)); save(); resetTimer(); renderStage(); scrollTo(0, 0); };
   // Pilot visibility: hide warm-up games/steps and the Design-questions box, but keep the data and code (see PILOT in content.js).
-  const widgets = st.widgets.filter((w) => !(PILOT.hideWarmup && w.type === 'game' && /warm-?up/i.test(w.label || '')) && !(PILOT.hideDesignQuestions && w.type === 'fields' && /^design questions/i.test(w.title || '')));
+  const widgets = shownWidgets(st);
   const steps = PILOT.hideWarmup ? st.steps.filter((s) => !/warm-?up/i.test(s.t)) : st.steps;
   const bkIcon = (b) => ({ Individual: '👤', Pairs: '👥', Groups: '👪', Plenary: '🗣' }[b] || '👥');
   const bkBadge = (b) => b && h('span', { class: 'breakout' }, `${bkIcon(b)} ${b}`);
@@ -967,6 +967,46 @@ async function stream(body, onText) {
   const rd = r.body.getReader(), dec = new TextDecoder();
   for (;;) { const { done, value } = await rd.read(); if (done) break; onText(dec.decode(value, { stream: true })); }
 }
+// The widgets a stage shows (pilot switches hide some, see PILOT in content.js).
+const shownWidgets = (st) => st.widgets.filter((w) => !(PILOT.hideWarmup && w.type === 'game' && /warm-?up/i.test(w.label || '')) && !(PILOT.hideDesignQuestions && w.type === 'fields' && /^design questions/i.test(w.title || '')));
+
+/* ---------- board photo: read real sticky notes into this stage ---------- */
+// What a photo can fill on the current stage, with the labels people see on screen.
+function photoTargets() {
+  const t = [];
+  for (const w of shownWidgets(stage())) {
+    if (w.type === 'notes') { const dyn = w.zones[0]?.id.startsWith('dream_') ? dreamLabels() : null; w.zones.forEach((z, i) => t.push({ kind: 'zone', id: z.id, label: `${w.title}: ${dyn?.[i] || z.label}${z.hint ? ` (${z.hint})` : ''}`, color: z.color })); }
+    if (w.type === 'process') for (const s of S.steps) { t.push({ kind: 'zone', id: 'fr:' + s.id, label: `Friction points at process step "${s.name}"`, color: 'white' }, { kind: 'field', id: 'ctx:' + s.id, label: `Context for process step "${s.name}" (what actually happens, systems, who)` }); }
+    if (w.type === 'vote') t.push({ kind: 'zone', id: 'usecases', label: 'Use cases', color: 'purple' });
+    if (w.type === 'fields' || w.type === 'promptcanvas') for (const f of w.fields) t.push({ kind: 'field', id: f.id, label: `${w.title}: ${f.label}` });
+    if (w.type === 'rows') t.push({ kind: 'rows', id: w.id, label: w.title, cols: w.cols.map((c) => ({ id: c.id, label: c.label, type: c.type })) });
+  }
+  t.push({ kind: 'zone', id: 'parking', label: 'Parking lot: questions or ideas that fit nowhere else', color: 'yellow' });
+  return t;
+}
+function applyPhoto(p) {
+  for (const n of p.notes) S.notes.push({ id: uid(), zone: n.zone, text: n.text, color: n.color });
+  const add = (old, t) => ((old || '').trim() ? old.trim() + '\n' + t : t);
+  for (const f of p.fields) {
+    if (f.id.startsWith('ctx:')) { const s = S.steps.find((x) => 'ctx:' + x.id === f.id); if (s) s.context = add(s.context, f.text); } else S.f[f.id] = add(S.f[f.id], f.text);
+  }
+  for (const r of p.rows) {
+    const rows = (S.rows[r.id] ||= []);
+    const empty = rows.find((x) => !Object.entries(x).some(([k, v]) => k !== 'who' && (v || '').trim())); // fill blank rows first
+    if (empty) Object.assign(empty, r.row); else rows.push({ who: 'both', ...r.row });
+  }
+  save(); renderStage();
+}
+// Phone photos are large: scale to at most 1600 px on the long side and send as JPEG.
+const shrinkPhoto = (file) => new Promise((ok, bad) => {
+  const img = new Image();
+  img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = h('canvas', { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src); ok(c.toDataURL('image/jpeg', 0.85)); };
+  img.onerror = () => { URL.revokeObjectURL(img.src); bad(new Error('Not an image this browser can open')); };
+  img.src = URL.createObjectURL(file);
+});
+let photoPlan = null; // { stage, image, plan } waiting for the team to add or discard; not saved
+
 function chatPanel() {
   const log = h('div', { class: 'log', 'aria-live': 'polite' });
   const draw = () => {
@@ -977,8 +1017,41 @@ function chatPanel() {
       const b = m.role === 'assistant' && line.match(/^\s*(?:[-*•]|\d+[.)])\s+"?(.+?)"?\s*$/);
       return b ? h('div', { class: 'sug' }, h('span', {}, b[1]), h('button', { title: 'Add as sticky note', 'aria-label': 'Add as sticky note: ' + b[1], onclick: () => { addNote(activeZone, b[1].replace(/\*\*/g, '')); toast(activeZone === 'parking' ? 'Added to the parking lot.' : 'Added to the selected area.'); renderStage(); } }, '+')) : h('p', {}, line);
     }))));
+    if (photoPlan?.stage === stage().id) {
+      const p = photoPlan.plan, label = new Map(photoTargets().map((t) => [t.id, t.label]));
+      const lines = [...p.notes.map((n) => `${label.get(n.zone)}: ${n.text}`), ...p.fields.map((f) => `${label.get(f.id)}: ${f.text}`),
+        ...p.rows.map((r) => `${label.get(r.id)}: ${Object.entries(r.row).filter(([k]) => k !== 'who').map(([, v]) => v).join(' | ')}${r.row.who ? ` (${r.row.who})` : ''}`)];
+      log.append(h('div', { class: 'msg assistant photoplan' },
+        h('img', { src: photoPlan.image, alt: 'Your board photo' }),
+        h('b', {}, `Ready to add ${lines.length} item${lines.length === 1 ? '' : 's'} to this stage`),
+        h('ul', {}, lines.map((l) => h('li', {}, l))),
+        p.unplaced.length > 0 && h('p', { class: 'hint' }, `Not placed (add by hand if needed): ${p.unplaced.join(' · ')}`),
+        h('div', { class: 'bar' },
+          lines.length > 0 && h('button', { class: 'primary', onclick: () => { photoPlan = null; applyPhoto(p); toast(`Added ${lines.length} item${lines.length === 1 ? '' : 's'} from the photo.`); } }, 'Add to the board'),
+          h('button', { class: 'ghost', onclick: () => { photoPlan = null; draw(); } }, 'Discard'))));
+    }
     log.scrollTop = log.scrollHeight;
   };
+  // A photo of the real board: Claude reads the notes and where they sit, then proposes where each goes on this stage.
+  const readPhoto = async (file) => {
+    if (!file) return;
+    const say = (content) => { S.chat.push({ role: 'assistant', content }); save(); draw(); };
+    if (!canClaude()) return say('Reading a photo of your board needs Claude: open ⚙ AI settings and use the server key or your own Claude key.');
+    let image;
+    try { image = await shrinkPhoto(file); } catch (e) { return say(`I could not open that file (${e.message}). Try a JPG or PNG photo.`); }
+    S.chat.push({ role: 'user', content: '📷 Photo of our board' }, { role: 'assistant', content: 'Reading your sticky notes and where they are on the board…' }); draw();
+    const wait = S.chat[S.chat.length - 1], targets = photoTargets();
+    try {
+      const r = await fetch('/api/photo', { method: 'POST', headers: { 'content-type': 'application/json', ...(cfg.key ? { 'x-api-key': cfg.key } : {}) }, body: JSON.stringify({ image, prompt: L.photoPrompt(stage().title, targets) }) });
+      if (!r.ok) throw new Error(await r.text());
+      const plan = L.parsePhoto((await r.json()).text, targets);
+      if (!plan) throw new Error('unreadable answer');
+      wait.content = (plan.summary || 'Here is what I read on your board.') + ' Check the list below, then add it to the board.';
+      photoPlan = { stage: stage().id, image, plan };
+    } catch { wait.content = 'I could not read that photo right now. Try again, ideally straight on, in good light, with the whole board in view.'; }
+    save(); draw();
+  };
+  const fileIn = h('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-hidden': 'true', tabindex: -1, onchange: (e) => { readPhoto(e.target.files[0]); e.target.value = ''; } });
   const ask = async (text) => {
     if (!text.trim()) return;
     const m = { role: 'assistant', content: '' };
@@ -997,7 +1070,8 @@ function chatPanel() {
       h('div', {}, h('b', {}, 'Coach'), h('small', {}, h('i', { class: 'dot' + (AI ? ' on' : '') }), AI ? 'Online' : 'Guide mode')),
       h('button', { class: 'aibtn', title: 'AI settings', onclick: aiSettings }, '⚙ ' + aiLabel())),
     log,
-    h('div', { class: 'chips' }, ['What should I do here?', 'Challenge my board', 'Suggest sticky notes'].map((c) => h('button', { onclick: () => ask(c) }, c))),
+    h('div', { class: 'chips' }, ['What should I do here?', 'Challenge my board', 'Suggest sticky notes'].map((c) => h('button', { onclick: () => ask(c) }, c)),
+      h('button', { title: 'Take or upload a photo of your real board; the coach puts its sticky notes on this stage', onclick: () => fileIn.click() }, '📷 Photo of our board'), fileIn),
     h('div', { class: 'ask' }, input, h('button', { class: 'primary send', 'aria-label': 'Send', onclick: () => { ask(input.value); input.value = ''; } }, '↑')));
 }
 

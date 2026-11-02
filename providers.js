@@ -50,6 +50,21 @@ export const providers = {
       for await (const ev of s) if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') yield ev.delta.text;
       if ((await s.finalMessage()).stop_reason === 'refusal') throw new Error('The model declined this request');
     },
+    // Read a photo of a physical board and answer the board-mapping prompt (see photoPrompt in public/logic.js).
+    async readBoard({ image, prompt, key }) {
+      if (!Anthropic || !(key || serverKey())) throw new Error('No Anthropic credentials');
+      const client = key ? new Anthropic({ apiKey: key }) : new Anthropic();
+      const [, media_type, data] = image.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/) || [];
+      if (!data) throw Object.assign(new Error('Bad image'), { status: 400 });
+      const r = await client.beta.messages.create({
+        model: process.env.PHOTO_MODEL || CLAUDE_MODEL, max_tokens: 16000,
+        output_config: { effort: 'low' }, // keeps a full board well inside the 60 s function limit on Vercel
+        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type, data } }, { type: 'text', text: prompt }] }],
+      });
+      if (r.stop_reason === 'refusal') throw new Error('The model declined this request');
+      return r.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    },
     // Read a handwritten sticky note (PNG data URL from the pen pad) and return plain text.
     async transcribe({ image, key }) {
       if (!Anthropic || !(key || serverKey())) throw new Error('No Anthropic credentials');

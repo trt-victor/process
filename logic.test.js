@@ -115,3 +115,16 @@ test('client-brief cases bring their own scenarios, as copies', () => {
   assert.notEqual(b[0].steps[0].name, 'changed');
   assert.ok(CASES.filter((c) => c.scenarios).every((c) => c.scenarios.every((x) => x.steps.every((st) => st.name && st.does))));
 });
+
+test('board photo: only known places are filled, the rest is listed as unplaced', () => {
+  const targets = [{ kind: 'zone', id: 'fr:a', label: 'Friction', color: 'white' }, { kind: 'field', id: 'start', label: 'Start trigger' },
+    { kind: 'rows', id: 'jtbd', label: 'Jobs', cols: [{ id: 'job', label: 'Job' }, { id: 'who', label: 'Who', type: 'who' }] }];
+  assert.match(L.photoPrompt('Today', targets), /\[fr:a\] Friction/);
+  const p = L.parsePhoto('Sure! {"summary":"Six notes","notes":[{"zone":"fr:a","text":" Late changes ","color":"neon"},{"zone":"nope","text":"Lost"}],' +
+    '"fields":[{"id":"start","text":"Customer e-mail"},{"id":"x","text":"Stray"}],"rows":[{"table":"jtbd","cells":{"job":"Log every change","who":"AI"}},{"table":"jtbd","cells":{"who":"human"}}],"unplaced":["Coffee"]}', targets);
+  assert.deepEqual(p.notes, [{ zone: 'fr:a', text: 'Late changes', color: 'white' }]);
+  assert.deepEqual(p.fields, [{ id: 'start', text: 'Customer e-mail' }]);
+  assert.deepEqual(p.rows, [{ id: 'jtbd', row: { job: 'Log every change', who: 'ai' } }]);
+  assert.deepEqual(p.unplaced, ['Coffee', 'Lost', 'Stray']);
+  assert.equal(L.parsePhoto('no json here', targets), null);
+});

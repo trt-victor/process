@@ -2,12 +2,12 @@
 import './env.js';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { chat, handwriting, state, status, statusData } from './handlers.js';
+import { chat, handwriting, photo, state, status, statusData } from './handlers.js';
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
 const FILES = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/logic.js': ['logic.js', 'text/javascript'], '/content.js': ['content.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
-const API = { '/api/chat': chat, '/api/handwriting': handwriting, '/api/state': state, '/api/status': status };
+const API = { '/api/chat': chat, '/api/handwriting': handwriting, '/api/photo': photo, '/api/state': state, '/api/status': status };
 
 http.createServer((req, res) => {
   const path = new URL(req.url, 'http://x').pathname;

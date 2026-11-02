@@ -410,3 +410,49 @@ export function parseProcess(text) {
     return { name: str(o.name), brief: str(o.brief), steps, quotes, probe };
   } catch { return null; }
 }
+
+// Board photo (coach): what the model is asked, and a strict reading of its answer.
+// targets: [{ kind: 'zone' | 'field' | 'rows', id, label, cols? }] — only these ids can be filled.
+export function photoPrompt(stageTitle, targets) {
+  const list = (kind, fmt) => targets.filter((t) => t.kind === kind).map(fmt).join('\n') || '- (none)';
+  return `This photo shows a physical workshop board (sticky notes on a wall, whiteboard or flip chart) for the stage "${stageTitle}".
+Read every sticky note and every piece of writing. Use where each note is placed (under which header, in which column, row, circle or area, next to which process step) and its colour to decide where it belongs on the digital board below. Keep the participants' own words; only fix obvious misreadings of handwriting. Do not invent or summarise notes. Something that fits nowhere goes in "unplaced".
+
+Sticky-note areas [id] label:
+${list('zone', (t) => `- [${t.id}] ${t.label}`)}
+Text fields [id] label:
+${list('field', (t) => `- [${t.id}] ${t.label}`)}
+Tables [id] title: columns (who = human | ai | both):
+${list('rows', (t) => `- [${t.id}] ${t.label}: ${t.cols.map((c) => `${c.id}=${c.label}`).join(', ')}`)}
+
+Reply with only JSON: {"summary": "one sentence on what the photo shows", "notes": [{"zone": "id", "text": "...", "color": "yellow|orange|green|pink|purple|white"}], "fields": [{"id": "id", "text": "..."}], "rows": [{"table": "id", "cells": {"columnId": "..."}}], "unplaced": ["..."]}`;
+}
+
+export function parsePhoto(text, targets) {
+  let o;
+  try { o = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)); } catch { return null; }
+  if (!o || typeof o !== 'object') return null;
+  const by = (kind) => new Map(targets.filter((t) => t.kind === kind).map((t) => [t.id, t]));
+  const zones = by('zone'), fields = by('field'), tables = by('rows');
+  const str = (v) => (typeof v === 'string' ? v.trim().slice(0, 500) : '');
+  const arr = (v) => (Array.isArray(v) ? v.slice(0, 200) : []);
+  const out = { summary: str(o.summary), notes: [], fields: [], rows: [], unplaced: arr(o.unplaced).map(str).filter(Boolean) };
+  for (const n of arr(o.notes)) {
+    const z = zones.get(n?.zone), t = str(n?.text);
+    if (!t) continue;
+    if (z) out.notes.push({ zone: z.id, text: t, color: COLORS_OK.includes(n.color) ? n.color : z.color || 'yellow' }); else out.unplaced.push(t);
+  }
+  for (const f of arr(o.fields)) { const t = str(f?.text); if (t && fields.has(f.id)) out.fields.push({ id: f.id, text: t }); else if (t) out.unplaced.push(t); }
+  for (const r of arr(o.rows)) {
+    const tb = tables.get(r?.table); if (!tb || !r.cells || typeof r.cells !== 'object') continue;
+    const row = {};
+    for (const c of tb.cols) {
+      const v = str(r.cells[c.id]);
+      if (c.type === 'who') row.who = ['human', 'ai', 'both'].includes(v.toLowerCase()) ? v.toLowerCase() : 'both';
+      else if (v) row[c.id] = v;
+    }
+    if (Object.keys(row).some((k) => k !== 'who')) out.rows.push({ id: tb.id, row });
+  }
+  return out;
+}
+const COLORS_OK = ['yellow', 'orange', 'green', 'pink', 'purple', 'white'];
