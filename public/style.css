@@ -387,3 +387,11 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
   body{background:#fff}.appbar .tools,.tabs,.timer,.capsules,.steps,.chat,.add,.gamecta,.grip,.lctl{display:none!important}
   .hero{background:none;padding:10px 0}.layout{display:block;padding:0}.board{background:none;border:0;padding:0}
   .panel,.zone,.card{box-shadow:none}}
+/* Pen on text boxes, and the Prompt / HTML tabs on the Deep Dive page */
+.penbox{position:relative;display:block}
+.penbox>textarea{padding-right:30px}
+.penbtn{position:absolute;top:4px;right:4px;z-index:2;border:0;background:rgba(255,255,255,.85);border-radius:6px;padding:1px 7px;font-size:13px;cursor:pointer;opacity:.6}
+.penbtn:hover,.penbtn:focus-visible{opacity:1}
+.ptabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 12px}
+.ptab{border:0;background:none;padding:8px 14px;font-weight:600;color:var(--grey);border-bottom:3px solid transparent;cursor:pointer}
+.ptab.on{color:var(--ink);border-bottom-color:var(--yellow)}

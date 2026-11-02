@@ -10,7 +10,7 @@ export const PILOT = {
   hideDesignQuestions: true, // the "Design questions for the chosen use case" box in Prioritize
   hidePrioritize: true,      // the whole Prioritize stage (its use-case voting now lives on the Scenario tab)
   stepFocusStar: false,
-  hideDeepDiveCanvas: true,  // the original Deep Dive & Prototype page (prompt canvas + build button); its duplicate shows only the AI pre-filled prototype      // the ☆ star-to-focus control in the process overview box
+  hideDeepDiveCanvas: true,  // the original Deep Dive & Prototype page (prompt canvas + build button); its duplicate shows only the build prompt, pre-filled from the earlier pages      // the ☆ star-to-focus control in the process overview box
 };
 
 // Breakout format shown next to each stage's explanation. Keyed by stage id (deepDive id is 'deep').
@@ -137,13 +137,13 @@ const deepDive = {
 // Duplicate of the Deep Dive page without the prompt canvas: the prototype is built automatically from everything filled in on the earlier pages.
 const deepProto = {
   ...deepDive, id: 'deepProto',
-  objective: 'Bring the selected scenario to life. Your prototype is already built from everything you filled in on the earlier pages: explore it, test it as the primary user and refine it.',
+  objective: 'Bring the selected scenario to life. Your prototype prompt is already written from everything you filled in on the earlier pages: read it, sharpen it and take it to Replit.',
   steps: [
-    { t: 'Explore the prototype', mins: 10, d: 'It is pre-filled from your process, jobs, dream state and scenario. Click through it as the primary user.' },
-    { t: 'Test and refine', mins: 10, d: 'What is missing or wrong? Describe a change in plain language and apply it.' },
-    { t: 'Take it to Replit', mins: 5, d: 'Download the Replit prompt to rebuild it as a full app in Replit, or download the .html to share.' },
+    { t: 'Read the prompt', mins: 10, d: 'It is pre-filled from your process, jobs, dream state and scenario. Does it describe what you want to build?' },
+    { t: 'Sharpen it', mins: 10, d: 'Change any words that are wrong or missing. Open the HTML tab to see a quick clickable preview.' },
+    { t: 'Take it to Replit', mins: 5, d: 'Copy or download the prompt and paste it into Replit AI.' },
   ],
-  widgets: [{ type: 'prototype', auto: true }],
+  widgets: [{ type: 'promptproto' }],
 };
 
 const full = [

@@ -44,7 +44,7 @@ function markUrl() {
 const uid = () => Math.random().toString(36).slice(2, 9);
 let AI = false, PROV = {}, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, home = false, live = [];
 let custom = [];
-let protoBuilding = false;
+let protoTab = 'prompt', protoBusy = false;
 try { custom = JSON.parse(localStorage.getItem(CKEY)) || []; } catch { /* no saved processes */ }
 
 // Tiny DOM builder; text always goes in as text nodes, never as HTML.
@@ -224,12 +224,13 @@ function sticky(n, redraw) {
 // Reads with the browser's own handwriting recognizer where there is one, otherwise with Claude (vision).
 // Without either, the drawing is kept on the note as ink and can be converted later.
 const canClaude = () => cfg.provider !== 'guide' && PROV.anthropic?.ok && !!(cfg.key || PROV.anthropic.server);
-function penPad(n) {
+// onText: write into a text box instead of a note (no ink to keep there).
+function penPad(n, onText) {
   const W = 960, H = 640, strokes = [];
   let cur = null, penSeen = false, busy = false;
   const cv = h('canvas', { width: W, height: H, class: 'pad c-' + n.color, 'aria-label': 'Handwriting area: write your note here' });
   const ctx = cv.getContext('2d');
-  const st = h('p', { class: 'hint padst', role: 'status' }, canClaude() || 'createHandwritingRecognizer' in navigator ? 'Write your note, then tap "Convert to text".' : 'Write your note. No AI is connected, so it is kept as handwriting (connect Claude in ⚙ AI settings to convert).');
+  const st = h('p', { class: 'hint padst', role: 'status' }, canClaude() || 'createHandwritingRecognizer' in navigator ? 'Write your note, then tap "Convert to text".' : onText ? 'Write here. To turn it into text, connect Claude in ⚙ AI settings.' : 'Write your note. No AI is connected, so it is kept as handwriting (connect Claude in ⚙ AI settings to convert).');
   const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height, t: Math.round(e.timeStamp) }; };
   const paint = (c, pts) => { c.lineWidth = 6; c.lineCap = c.lineJoin = 'round'; c.strokeStyle = '#1a1a24'; c.beginPath(); pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y))); if (pts.length === 1) c.lineTo(pts[0].x + .1, pts[0].y); c.stroke(); };
   const redrawAll = () => { ctx.clearRect(0, 0, W, H); if (bg) ctx.drawImage(bg, 0, 0, W, H); strokes.forEach((s) => paint(ctx, s.pts)); };
@@ -272,9 +273,10 @@ function penPad(n) {
     busy = true; btn.disabled = true; st.textContent = 'Reading your handwriting…';
     try {
       const text = await recognise();
-      if (text == null) return keepInk();
+      if (text == null) return onText ? (st.textContent = 'No handwriting reader is available here. Connect Claude in ⚙ AI settings, or type instead.') : keepInk();
       if (!text) { st.textContent = 'Could not read that. Try writing a bit larger, or keep it as handwriting.'; return; }
-      n.text = n.text?.trim() ? n.text.trim() + '\n' + text : text; delete n.ink; save(); $('dlg').close(); toast('✓ Converted to text. You can still edit it.');
+      if (onText) onText(text); else { n.text = n.text?.trim() ? n.text.trim() + '\n' + text : text; delete n.ink; save(); }
+      $('dlg').close(); toast('✓ Converted to text. You can still edit it.');
     } catch { st.textContent = 'The AI could not read it right now. Try again, or keep it as handwriting.'; }
     finally { busy = false; btn.disabled = false; }
   };
@@ -284,7 +286,7 @@ function penPad(n) {
       h('button', { onclick: () => { strokes.pop(); redrawAll(); } }, '↶ Undo'),
       h('button', { onclick: () => { strokes.length = 0; redrawAll(); } }, 'Clear'),
       h('span', { style: 'flex:1' }),
-      h('button', { class: 'ghost', onclick: keepInk }, 'Keep as handwriting'),
+      !onText && h('button', { class: 'ghost', onclick: keepInk }, 'Keep as handwriting'),
       h('button', { class: 'primary', onclick: convert }, 'Convert to text ✓')),
   ]);
   $('dlg').classList.add('wide');
@@ -294,6 +296,9 @@ function penPad(n) {
     if (fresh && !n.text?.trim() && !n.ink && S.notes.includes(n)) { S.notes = S.notes.filter((x) => x !== n); save(); renderStage(); }
   }, { once: true });
 }
+// Pen for any text box: write by hand, and the recognised text is added to the box (saved through the box's own input handler).
+const pen = (ta) => h('span', { class: 'penbox' }, ta, h('button', { class: 'penbtn', type: 'button', title: 'Write by hand', 'aria-label': 'Write in this box by hand',
+  onclick: (e) => { e.preventDefault(); e.stopPropagation(); penPad({ text: '', color: 'white' }, (t) => { ta.value = ta.value.trim() ? ta.value.trim() + '\n' + t : t; ta.dispatchEvent(new Event('input', { bubbles: true })); }); } }, '✎'));
 function addNote(zoneId, text = '', color = 'yellow') { const n = { id: uid(), zone: zoneId, text, color }; S.notes.push(n); save(); return n; }
 function zoneEl(z, inner) {
   const body = h('div', { class: 'znotes' });
@@ -380,7 +385,7 @@ const W = {
       status.textContent = '';
     };
     const lines = w.fields.map((f) => h('label', { class: 'pcrow' }, h('b', {}, f.lead),
-      h('textarea', { rows: 1, placeholder: f.ph || 'Type here…', value: S.f[f.id] || '', 'aria-label': f.label, oninput: (e) => { S.f[f.id] = e.target.value; save(); live.forEach((fn) => fn()); } })));
+      pen(h('textarea', { rows: 1, placeholder: f.ph || 'Type here…', value: S.f[f.id] || '', 'aria-label': f.label, oninput: (e) => { S.f[f.id] = e.target.value; save(); live.forEach((fn) => fn()); } }))));
     live.push(assemble); assemble();
     return h('div', { class: 'panel' }, h('h3', {}, w.title, w.tip && info(w.tip)),
       w.intro && h('p', { class: 'hint' }, w.intro),
@@ -397,7 +402,7 @@ const W = {
     const warn = h('span', { class: 'warn', role: 'status' });
     const check = () => { warn.textContent = f.lint && L.isPitch(S.f[f.id]) ? '🟨 Yellow card: no "AI" or tool names. Ask about their work.' : f.lint && S.f[f.id] && !L.isOpen(S.f[f.id]) ? 'Tip: start with what, how, who or which.' : ''; };
     check();
-    return h('label', { class: 'field' }, h('b', {}, f.label, f.tip && info(f.tip)), h('textarea', { rows: w.cols ? 4 : 2, placeholder: f.ph || 'Type here…', value: S.f[f.id] || '', oninput: (e) => { S.f[f.id] = e.target.value; save(); check(); live.forEach((fn) => fn()); } }), warn);
+    return h('label', { class: 'field' }, h('b', {}, f.label, f.tip && info(f.tip)), pen(h('textarea', { rows: w.cols ? 4 : 2, placeholder: f.ph || 'Type here…', value: S.f[f.id] || '', oninput: (e) => { S.f[f.id] = e.target.value; save(); check(); live.forEach((fn) => fn()); } })), warn);
   }))),
 
   rows: (w) => {
@@ -406,7 +411,7 @@ const W = {
     const cell = (r, c) => {
       if (c.type === 'who') { const box = h('div', { class: 'who' }); const draw = () => box.replaceChildren(...[['human', '👤 Human'], ['both', '🤝 Both'], ['ai', '🤖 AI']].map(([v, l]) => h('button', { class: r.who === v ? 'on' : '', 'aria-pressed': String(r.who === v), onclick: () => { r.who = v; save(); draw(); } }, l))); draw(); return box; }
       if (c.type === 'signal') return h('select', { 'aria-label': c.label, onchange: (e) => { r.signal = e.target.value; save(); } }, h('option', { value: '' }, '–'), SIGNALS.map((s) => h('option', { value: String(s.n), selected: r.signal === String(s.n) }, `${s.n} · ${s.name}`)));
-      return h('textarea', { rows: 2, 'aria-label': c.label, placeholder: 'Type here…', value: r[c.id] || '', oninput: (e) => { r[c.id] = e.target.value; save(); } });
+      return pen(h('textarea', { rows: 2, 'aria-label': c.label, placeholder: 'Type here…', value: r[c.id] || '', oninput: (e) => { r[c.id] = e.target.value; save(); } }));
     };
     const draw = () => body.replaceChildren(...rows.map((r) => h('tr', {}, w.cols.map((c) => h('td', {}, cell(r, c))), h('td', {}, h('button', { class: 'x', 'aria-label': 'Remove row', onclick: () => { rows.splice(rows.indexOf(r), 1); save(); draw(); } }, '×')))));
     draw();
@@ -432,7 +437,7 @@ const W = {
       s.desc && h('p', { class: 'stepnote' }, s.desc),
       zoneEl({ id: 'fr:' + s.id, label: 'Friction points', color: 'white', tip: 'Friction is where time, effort, information or quality is lost in this step — anything slow, manual, error-prone, duplicated or unclear.' }),
       h('label', { class: 'stepctx' }, h('span', {}, 'Context'),
-        h('textarea', { rows: 2, placeholder: 'What actually happens here: systems, who does it, inputs/outputs…', 'aria-label': 'Context for ' + s.name, value: s.context || '', oninput: (e) => { s.context = e.target.value; save(); } })))),
+        pen(h('textarea', { rows: 2, placeholder: 'What actually happens here: systems, who does it, inputs/outputs…', 'aria-label': 'Context for ' + s.name, value: s.context || '', oninput: (e) => { s.context = e.target.value; save(); } }))))),
     h('button', { class: 'add', onclick: () => { S.steps.push({ id: uid(), name: 'New step', desc: '' }); save(); renderStage(); } }, '+ step'))),
 
   vote: () => {
@@ -442,7 +447,7 @@ const W = {
     const top = [...cards].sort((a, b) => (S.votes[b.id] || 0) - (S.votes[a.id] || 0))[0];
     return h('div', { class: 'panel' }, h('h3', {}, 'Use cases'), h('p', { class: 'hint' }, `You have ${left()} of 2 votes left. Tap a star to vote, tap again to take it back.`),
       h('div', { class: 'ucs' }, cards.map((n) => h('div', { class: 'uc' },
-        h('textarea', { value: n.text, rows: 2, 'aria-label': 'Use case', oninput: (e) => { n.text = e.target.value; save(); } }),
+        pen(h('textarea', { value: n.text, rows: 2, 'aria-label': 'Use case', oninput: (e) => { n.text = e.target.value; save(); } })),
         h('div', {}, [1, 2].map((i) => h('button', { class: 'star' + ((S.votes[n.id] || 0) >= i ? ' on' : ''), 'aria-label': `Vote ${i}`, onclick: () => { const v = S.votes[n.id] || 0; if (v >= i) S.votes[n.id] = i - 1; else if (left() >= i - v) S.votes[n.id] = i; save(); renderStage(); } }, '★')),
           h('button', { class: 'x', 'aria-label': 'Delete use case', onclick: () => { S.notes = S.notes.filter((x) => x !== n); delete S.votes[n.id]; save(); renderStage(); } }, '×'))))),
       h('div', { class: 'bar' }, h('button', { class: 'add', onclick: () => { addNote('usecases', '', 'purple'); renderStage(); } }, '+ use case'), h('button', { class: 'add', onclick: pull }, 'Pull from my scenario / jobs'),
@@ -480,12 +485,12 @@ const W = {
     const last = sc.steps.length - 1;
     // Swimlane SOP: phase headers on top, Human above and Agents below the yellow Orchestration backbone; arrows show hand-offs.
     const slot = (key, ph, dir) => (s) => h('div', { class: `lcell ${dir}` + (s[key] ? ' has' : '') },
-      h('textarea', { class: 'lslot ' + (key === 'human' ? 'lh' : 'la'), rows: 2, value: s[key] || '', placeholder: ph, 'aria-label': ph,
-        oninput: (e) => { s[key] = e.target.value || null; e.target.parentNode.classList.toggle('has', !!e.target.value); save(); } }));
+      pen(h('textarea', { class: 'lslot ' + (key === 'human' ? 'lh' : 'la'), rows: 2, value: s[key] || '', placeholder: ph, 'aria-label': ph,
+        oninput: (e) => { s[key] = e.target.value || null; e.target.closest('.lcell').classList.toggle('has', !!e.target.value); save(); } })));
     const head = (s, i) => h('div', { class: 'lhead' }, h('small', {}, `Step ${i + 1}`),
       h('input', { class: 'loname', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }));
     const orch = (s, i) => h('div', { class: 'lcell mid' + (i < last ? ' arr' : '') },
-      h('textarea', { class: 'lo', rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens', oninput: (e) => { s.does = e.target.value; save(); } }));
+      pen(h('textarea', { class: 'lo', rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens', oninput: (e) => { s.does = e.target.value; save(); } })));
     const ctl = (s, i) => h('div', { class: 'lctl' },
       h('button', { class: 'x', title: 'Move left', 'aria-label': 'Move step left', disabled: i === 0, onclick: () => reorder(i, -1) }, '◀'),
       h('button', { class: 'x', title: 'Delete step', 'aria-label': 'Delete step', onclick: () => { sc.steps.splice(i, 1); save(); renderStage(); } }, '×'),
@@ -504,33 +509,70 @@ const W = {
     return box;
   },
 
-  // w.auto: no canvas on the page, so the prototype builds itself from the earlier pages the first time the page opens.
-  prototype: (w) => {
-    const status = h('span', { class: 'hint', role: 'status' }, protoBuilding ? 'Building…' : '');
+  prototype: () => {
+    const status = h('span', { class: 'hint', role: 'status' });
     const change = h('input', { placeholder: 'Describe a change, e.g. "add a filter for high-risk cases"', 'aria-label': 'Change request' });
     const build = async (req) => {
-      if (protoBuilding) return;
-      protoBuilding = true; status.textContent = 'Building…';
+      status.textContent = 'Building…';
       let html = '';
       if (AI) try { await stream({ system: 'You build small, self-contained HTML prototypes.', messages: [{ role: 'user', content: L.protoPrompt(S, flow(), req, req && S.proto) }], effort: 'medium' }, (d) => { html += d; status.textContent = `Building… ${html.length} chars`; }); html = L.stripFences(html); } catch { html = ''; }
       if (!/<html|<!doctype/i.test(html)) { if (AI) toast('The model did not return a prototype, so this is the built-in simulation.'); html = L.buildPrototype(S); }
-      protoBuilding = false; S.proto = html; save(); renderStage();
+      S.proto = html; save(); renderStage();
     };
-    if (w.auto && !S.proto && !protoBuilding) setTimeout(() => build());
     const dl = (name, text, type) => { const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name }); a.click(); URL.revokeObjectURL(a.href); };
     return h('div', { class: 'panel' }, h('h3', {}, 'Working prototype'),
-      h('div', { class: 'bar' }, w.auto ? S.proto && h('button', { class: 'primary', onclick: () => build() }, 'Rebuild from earlier pages')
-        : h('button', { class: 'primary', onclick: () => build() }, S.proto ? 'Rebuild from canvas' : '⚡ Build my prototype'),
+      h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: () => build() }, S.proto ? 'Rebuild from canvas' : '⚡ Build my prototype'),
         S.proto && h('button', { class: 'add', onclick: () => dl('prototype.html', S.proto, 'text/html') }, 'Download .html'),
         h('button', { class: 'add', onclick: replitDialog }, '⬇ Replit prompt (.md)'), status),
-      w.auto ? h('p', { class: 'hint' }, AI ? 'Built by AI from everything your team filled in on the earlier pages. It runs right here in your browser (sandboxed, no internet). To build it as a full app, use “Replit prompt (.md)” and paste it into Replit AI.' : 'Built from everything your team filled in on the earlier pages. Connect a model (⚙ in the coach panel) to have AI build a custom prototype. To build it in Replit, use “Replit prompt (.md)” and paste it into Replit AI.')
-      : h('p', { class: 'hint' }, '“Build my prototype” creates a clickable preview right here in your browser (sandboxed, no internet) that you can download as an .html file — it does not create a Replit project. To build in Replit, use “Replit prompt (.md)” and paste it into Replit AI.'),
+      h('p', { class: 'hint' }, '“Build my prototype” creates a clickable preview right here in your browser (sandboxed, no internet) that you can download as an .html file — it does not create a Replit project. To build in Replit, use “Replit prompt (.md)” and paste it into Replit AI.'),
       // Sandboxed without same-origin, and no network: generated code cannot reach this app's storage or the internet.
       S.proto && h('iframe', { class: 'proto', title: 'Prototype preview', sandbox: 'allow-scripts', srcdoc: `<meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob:">` + S.proto }),
       S.proto && AI && h('div', { class: 'bar' }, change, h('button', { class: 'add', onclick: () => change.value.trim() && build(change.value.trim()) }, 'Apply change')),
       S.proto && !AI && h('p', { class: 'hint' }, 'This is the built-in simulation of your scenario. Connect a model (⚙ in the coach panel) to generate custom screens and request changes in plain language.'));
   },
 
+  // Deep Dive duplicate: the build prompt, written from the earlier pages, to read, edit and take away. The HTML is built only when asked for, in its own tab.
+  promptproto: () => {
+    const status = h('span', { class: 'hint', role: 'status' });
+    const tab = (id, label) => h('button', { class: 'ptab' + (protoTab === id ? ' on' : ''), 'aria-pressed': String(protoTab === id), onclick: () => { protoTab = id; renderStage(); } }, label);
+    const dl = (name, text, type) => { const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name }); a.click(); URL.revokeObjectURL(a.href); };
+    const head = h('div', { class: 'ptabs', role: 'group', 'aria-label': 'Prompt or HTML' }, tab('prompt', 'Prompt'), tab('html', 'HTML'));
+    if (protoTab === 'prompt') {
+      const ta = h('textarea', { class: 'mail', rows: 18, 'aria-label': 'Build prompt', value: S.protoPrompt ?? L.replitPrompt(S, flow(), 'template'), oninput: (e) => { S.protoPrompt = e.target.value; save(); } });
+      // With a model connected, AI writes the prompt once from the earlier pages; after that it is the team's to edit.
+      if (AI && S.protoPrompt == null && !protoBusy) setTimeout(async () => {
+        protoBusy = true; status.textContent = 'AI is writing the prompt from your earlier pages…'; let t = '';
+        try {
+          await stream({ system: 'You write a clear build prompt in markdown for Replit AI from a workshop board. Use only what the board says; do not invent requirements. Reply with only the prompt.', messages: [{ role: 'user', content: `Board:\n${L.snapshot(S, flow())}\n\nFill in this structure:\n${L.replitPrompt(S, flow(), 'template')}` }], effort: 'low' }, (d) => { t += d; ta.value = t; });
+          if (t.trim()) { S.protoPrompt = L.stripFences(t); save(); }
+        } catch { /* keep the template */ }
+        protoBusy = false; renderStage();
+      });
+      return h('div', { class: 'panel' }, h('h3', {}, 'Your prototype prompt'), head,
+        h('p', { class: 'hint' }, 'Written from everything your team filled in on the earlier pages. Read it, change any words, then take it to Replit AI.'),
+        ta,
+        h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: async () => { try { await navigator.clipboard.writeText(ta.value); toast('Prompt copied.'); } catch { ta.select(); } } }, 'Copy prompt'),
+          h('button', { class: 'add', onclick: () => dl('replit-prompt.md', ta.value, 'text/markdown') }, 'Download .md'), protoBusy ? h('span', { class: 'hint' }, 'AI is writing the prompt from your earlier pages…') : status));
+    }
+    const change = h('input', { placeholder: 'Describe a change, e.g. "add a filter for high-risk cases"', 'aria-label': 'Change request' });
+    const build = async (req) => {
+      if (protoBusy) return;
+      protoBusy = true; status.textContent = 'Building…';
+      const prompt = S.protoPrompt ?? L.replitPrompt(S, flow(), 'template');
+      let html = '';
+      if (AI) try { await stream({ system: 'You build small, self-contained HTML prototypes.', messages: [{ role: 'user', content: req ? L.protoPrompt(S, flow(), req, S.proto) : `Build this as ONE self-contained HTML file (inline CSS and JS, no external resources, no network calls, realistic sample data). Reply with only the HTML.\n\n${prompt}` }], effort: 'medium' }, (d) => { html += d; status.textContent = `Building… ${html.length} chars`; }); html = L.stripFences(html); } catch { html = ''; }
+      if (!/<html|<!doctype/i.test(html)) { if (AI) toast('The model did not return a prototype, so this is the built-in simulation.'); html = L.buildPrototype(S); }
+      protoBusy = false; S.proto = html; save(); renderStage();
+    };
+    return h('div', { class: 'panel' }, h('h3', {}, 'Your prototype prompt'), head,
+      S.proto ? [
+        // Sandboxed without same-origin, and no network: generated code cannot reach this app's storage or the internet.
+        h('iframe', { class: 'proto', title: 'Prototype preview', sandbox: 'allow-scripts', srcdoc: `<meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob:">` + S.proto }),
+        h('div', { class: 'bar' }, h('button', { class: 'add', onclick: () => dl('prototype.html', S.proto, 'text/html') }, 'Download .html'),
+          AI && [change, h('button', { class: 'add', onclick: () => change.value.trim() && build(change.value.trim()) }, 'Apply change')], status)]
+      : [h('p', { class: 'hint' }, 'No HTML yet. Build a clickable preview from the prompt to see it here (sandboxed, no internet).'),
+        h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: () => build() }, 'Build HTML from the prompt'), status)]);
+  },
   mail: () => {
     const asks = ['30 minutes to spar', 'prepare the next client conversation together', 'propose a Reimagination session with the client', 'a quick prototype to show'];
     const checks = ['fits within our assignment', 'independence checked with the engagement partner'];
