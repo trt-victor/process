@@ -156,7 +156,7 @@ export function coachReply(stage, S, text) {
   if (/sticky|stickies|suggest|idea|example/.test(t)) return `A few starters. Keep the ones that are true for you and rewrite them in your own words:\n${stage.ideas.map((i) => '- ' + i).join('\n')}`;
   if (/challenge|critique|review|check|feedback/.test(t)) return gaps.length ? `Here is what I would tighten:\n${gaps.map((g) => '• ' + g).join('\n')}` : 'This stage looks complete. Read it back once: is every note a fact or a quote, not a judgement about people? If yes, move on.';
   const q = stage.ask[S.chat.filter((m) => m.role === 'user').length % stage.ask.length];
-  return `${stage.steps.map((s, i) => `${i + 1}. ${s.t} (${s.mins} min)`).join('\n')}\n\n${gaps[0] ? 'Next: ' + gaps[0] : 'You have covered the basics here.'}\n\nA question to think about: ${q}`;
+  return `${stage.steps.map((s, i) => `${i + 1}. ${s.t}${s.mins != null ? ` (${s.mins} min)` : ''}`).join('\n')}\n\n${gaps[0] ? 'Next: ' + gaps[0] : 'You have covered the basics here.'}\n\nA question to think about: ${q}`;
 }
 
 export function summaryMd(S, flow) {

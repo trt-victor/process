@@ -677,7 +677,7 @@ function renderStage() {
           h('ol', { class: 'timeline' }, steps.map((s, i) => h('li', {},
             h('details', { class: 'step', open: i === 0 },
               h('summary', {}, h('span', { class: 'snum' }, String(i + 1)),
-                h('span', { class: 'stitle' }, h('b', {}, s.t), h('span', { class: 'smeta' }, h('small', {}, `${s.mins} min`), bkBadge(s.bk || BREAKOUT[st.id])))),
+                h('span', { class: 'stitle' }, h('b', {}, s.t), h('span', { class: 'smeta' }, s.mins != null && h('small', {}, `${s.mins} min`), bkBadge(s.bk || BREAKOUT[st.id])))),
               h('p', {}, s.d)))))),
         h('details', { class: 'card qs' }, h('summary', {}, h('span', { class: 'qicon', 'aria-hidden': 'true' }, '?'), 'Questions along the way'), h('ul', {}, st.ask.map((q) => h('li', {}, q)))),
         h('div', { class: 'bar stagenav' }, S.stage > 0 && h('button', { class: 'ghost', onclick: () => go(-1) }, '‹  Back'), S.stage < n - 1 && h('button', { class: 'primary', onclick: () => go(1) }, 'Next stage  ›'))),

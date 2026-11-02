@@ -136,12 +136,11 @@ const deepDive = {
 
 // Duplicate of the Deep Dive page without the prompt canvas: the prototype is built automatically from everything filled in on the earlier pages.
 const deepProto = {
-  ...deepDive, id: 'deepProto',
+  ...deepDive, id: 'deepProto', mins: 10, // the Replit step is a group moment without a time
   objective: 'Bring the selected scenario to life. Your prototype prompt is already written from everything you filled in on the earlier pages: read it, sharpen it and take it to Replit.',
   steps: [
-    { t: 'Read the prompt', mins: 10, d: 'It is pre-filled from your process, jobs, dream state and scenario. Does it describe what you want to build?' },
-    { t: 'Sharpen it', mins: 10, d: 'Change any words that are wrong or missing. Open the HTML tab to see a quick clickable preview.' },
-    { t: 'Take it to Replit', mins: 5, d: 'Copy or download the prompt and paste it into Replit AI.' },
+    { t: 'Read the prompt', mins: 10, bk: 'Individual', d: 'It is pre-filled from your process, jobs, dream state and scenario. Does it describe what you want to build?' },
+    { t: 'Take it to Replit', bk: 'Groups', d: 'Copy or download the prompt and paste it into Replit AI.' },
   ],
   widgets: [{ type: 'promptproto' }],
 };
@@ -177,7 +176,7 @@ const full = [
       { t: 'Identify the Jobs-to-be-Done', mins: 5, bk: 'Individual', d: 'Reflect on the selected process challenge and identify the most important jobs that need to be accomplished to achieve a successful outcome. Focus on what needs to be achieved, not how it is done today. Capture your ideas on sticky notes.' },
       { t: 'Share and Cluster', mins: 5, bk: 'Pairs', d: 'Share your ideas with a partner and discuss similarities, differences and emerging themes. Together, identify the jobs-to-be-done that are most critical to success.' },
       { t: 'Prioritize as a Group', mins: 5, bk: 'Groups', d: 'Review the identified jobs-to-be-done and agree on the most important ones. Focus on the jobs that would create the greatest value if they could be fulfilled more effectively.' },
-      { t: 'Human, AI, or Both?', mins: 10, bk: 'Pairs', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, AI, or both. Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
+      { t: 'Human, AI, or Both?', mins: 10, bk: 'Groups', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, AI, or both. Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
     ],
     ask: ['What are we actually trying to achieve here, regardless of today\'s tools?', 'Is this job judgement, or is it gathering and comparing?', 'What would a person still decide if everything were prepared for them?'],
     ideas: ['First time right at entry', 'Predict peaks to plan capacity', 'Clear governance on who may change what', 'Deliver on time'],

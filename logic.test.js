@@ -73,7 +73,7 @@ test('content is consistent', () => {
     const fields = flow.stages.flatMap((s) => s.widgets.flatMap((w) => (w.fields || []).map((f) => f.id)));
     assert.equal(new Set(zones).size, zones.length);
     assert.equal(new Set(fields).size, fields.length);
-    for (const s of flow.stages) assert.equal(s.steps.reduce((a, x) => a + x.mins, 0), s.mins, s.id);
+    for (const s of flow.stages) assert.equal(s.steps.reduce((a, x) => a + (x.mins || 0), 0), s.mins, s.id);
   }
   assert.ok(CASES.every((c) => c.steps.length));
 });
