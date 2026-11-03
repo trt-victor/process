@@ -151,6 +151,8 @@ export function snapshot(S, flow) {
     const wn = (S.scenario.notes || []).map((n) => n.text.trim()).filter(Boolean);
     if (wn.length) out.push('Whiteboard notes: ' + wn.join(' · '));
   }
+  const csn = (S.cs?.notes || []).map((n) => n.text.trim()).filter(Boolean);
+  if (csn.length) out.push("Notes on today's process whiteboard: " + csn.join(' · '));
   const park = zone(S, 'parking'); if (park.length) out.push('Parking lot: ' + park.join(' · '));
   return out.join('\n');
 }

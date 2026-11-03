@@ -299,22 +299,25 @@ function penPad(n, onText) {
 // Pen for any text box: write by hand, and the recognised text is added to the box (saved through the box's own input handler).
 const pen = (ta) => h('span', { class: 'penbox' }, ta, h('button', { class: 'penbtn', type: 'button', title: 'Write by hand', 'aria-label': 'Write in this box by hand',
   onclick: (e) => { e.preventDefault(); e.stopPropagation(); penPad({ text: '', color: 'white' }, (t) => { ta.value = ta.value.trim() ? ta.value.trim() + '\n' + t : t; ta.dispatchEvent(new Event('input', { bubbles: true })); }); } }, '✎'));
-/* ---------- whiteboard: the reimagined scenario as a Miro-like board ---------- */
+/* ---------- whiteboard: a Miro-like board for the reimagined scenario and for today's process ---------- */
+// mode 'scen': the scenario (Orchestration row; a Human card above and an Agent card below each step).
+// mode 'cs': today's process on Today's Reality (step cards with their context; friction sticky notes hang below each step).
 // Pan by dragging the background or scrolling, zoom with ctrl/⌘ + scroll or the + − buttons, drag cards by their header
 // (or focus a header and use the arrow keys). Each step's Human card hangs above it and its Agent card below, and both move with it.
 // The left-to-right position of the step cards is the step order, so the team builds the process by arranging it.
 const WB = { gap: 250, human: -200, agent: 200 };
 let wbView = null, wbSc = null; // pan/zoom survives re-renders of the same scenario; a new scenario starts fitted
-function whiteboard(sc) {
-  if (wbSc !== sc) { wbSc = sc; wbView = null; }
+function whiteboard(sc, mode = 'scen', key = sc) {
+  const cs = mode === 'cs';
+  if (wbSc !== key) { wbSc = key; wbView = null; }
   sc.steps.forEach((s, i) => { s.id ||= uid(); if (!Number.isFinite(s.x)) { s.x = i * WB.gap; s.y = 0; } });
   sc.notes ||= [];
   const svgEl = () => { const e = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); e.setAttribute('class', 'wblines'); e.setAttribute('aria-hidden', 'true'); return e; };
   const svg = svgEl(), tsvg = svgEl(), tmp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   tmp.setAttribute('class', 'flow temp'); tsvg.append(tmp);
   const world = h('div', { class: 'wbworld' }), zl = h('span', { class: 'wbzl' }), overlay = h('div', { class: 'wbover' });
-  const autoBtn = h('button', { title: 'Let the arrows follow the step order again (left to right)', disabled: true, onclick: () => { delete sc.links; sel = null; save(); lines(); toast('Arrows follow the step order again.'); } }, '↺ Auto arrows');
-  const vp = h('div', { class: 'wb', role: 'region', 'aria-label': 'Scenario whiteboard' }, world);
+  const autoBtn = h('button', { title: 'Let the arrows follow the step order again (left to right)', disabled: true, onclick: () => { sc.links = undefined; sel = null; save(); lines(); toast('Arrows follow the step order again.'); } }, '↺ Auto arrows');
+  const vp = h('div', { class: 'wb', role: 'region', 'aria-label': cs ? "Today's process whiteboard" : 'Scenario whiteboard' }, world);
   // --iz lets the arrow controls keep their on-screen size at any zoom.
   const apply = () => { if (!wbView) return; world.style.transform = `translate(${wbView.x}px,${wbView.y}px) scale(${wbView.z})`; world.style.setProperty('--iz', 1 / wbView.z); zl.textContent = Math.round(wbView.z * 100) + '%'; };
   const zoomAt = (f, cx, cy) => { const z = Math.min(2, Math.max(0.3, wbView.z * f)); wbView = { z, x: cx - (cx - wbView.x) * z / wbView.z, y: cy - (cy - wbView.y) * z / wbView.z }; apply(); };
@@ -333,7 +336,13 @@ function whiteboard(sc) {
   // Where a step's human/agent card (or its "+" chip, when empty) sits.
   const at = (s, k, chip) => chip ? [s.x + 50, k === 'human' ? s.y - 36 : s.y + 168] : [s.x + (s[k + 'dx'] || 0), s.y + (s[k + 'dy'] ?? WB[k])];
   const att = { human: [], agent: [] }, stepEls = [];
-  const place = (s, i) => { for (const k of ['human', 'agent']) { const el = att[k][i]; if (el) pos(el, ...at(s, k, el.classList.contains('wbchip'))); } };
+  // Today's process: friction notes are S.notes in zone fr:<step id>, placed relative to their step (dx, dy) so they move with it.
+  const frOf = (s) => S.notes.filter((n) => n.zone === 'fr:' + s.id), frEls = [];
+  const frAt = (s, n, j) => [s.x + (n.dx ?? 0), s.y + (n.dy ?? 200 + j * 130)];
+  const place = (s, i) => {
+    for (const k of ['human', 'agent']) { const el = att[k][i]; if (el) pos(el, ...at(s, k, el.classList.contains('wbchip'))); }
+    for (const f of frEls[i] || []) f.n ? pos(f.el, ...frAt(s, f.n, f.j)) : pos(f.el, s.x + 50, s.y + 168);
+  };
 
   // Arrows. Until the team edits one, they simply follow the step order (left to right). The first edit (reverse, remove,
   // draw, insert) turns them into the team's own list, sc.links, of { from, to } card ids; "Auto arrows" goes back.
@@ -366,7 +375,7 @@ function whiteboard(sc) {
   const remove = (l) => { sc.links = own().filter((x) => !same(x, l)); sel = null; save(); lines(); };
   const insert = (l) => {
     const A = stepOf(l.from), B = stepOf(l.to); if (!A || !B) return;
-    const n = { id: uid(), name: 'New step', does: '', agent: null, human: null, x: A.x + WB.gap, y: A.y };
+    const n = { id: uid(), name: 'New step', ...(cs ? { desc: '' } : { does: '', agent: null, human: null }), x: A.x + WB.gap, y: A.y };
     for (const s of sc.steps) if (s !== A && s.x >= n.x - WB.gap / 2) s.x += WB.gap; // make room to the right
     sc.steps.push(n); sc.steps.sort((a, b) => a.x - b.x);
     if (sc.links) { sc.links = sc.links.filter((x) => !same(x, l)); sc.links.push({ from: A.id, to: n.id }, { from: n.id, to: B.id }); }
@@ -391,6 +400,7 @@ function whiteboard(sc) {
     });
     stepEls.forEach((el, i) => {
       const a = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+      for (const f of frEls[i] || []) if (f.n) d += `<path class="link" d="M${a.x + a.w / 2} ${a.y + a.h}L${f.el.offsetLeft + f.el.offsetWidth / 2} ${f.el.offsetTop}"/>`;
       for (const k of ['human', 'agent']) {
         const e = att[k][i]; if (!e || e.classList.contains('wbchip')) continue;
         const c = { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }, up = k === 'human';
@@ -451,10 +461,20 @@ function whiteboard(sc) {
   const handle = (label, aria, ...btns) => h('div', { class: 'wbhandle', tabindex: 0, role: 'button', 'aria-label': aria + ': drag, or use the arrow keys to move' }, h('small', {}, label), h('span', { class: 'wbbtns' }, btns));
 
   const stepCard = (s, i) => {
-    const el = h('div', { class: 'wbcard wbstep', 'data-node': s.id });
-    const hd = handle(`Step ${i + 1}`, `Step ${i + 1}, ${s.name}`, h('button', { class: 'wbx', title: 'Delete step', 'aria-label': 'Delete step ' + s.name, onclick: () => { sc.steps.splice(sc.steps.indexOf(s), 1); unlink((x) => x === s.id || x.startsWith(s.id + ':')); save(); draw(); } }, '×'));
+    const el = h('div', { class: 'wbcard wbstep' + (cs ? ' wbcs' : '') + (cs && S.focus === s.id ? ' focus' : ''), 'data-node': s.id });
+    const del = () => {
+      if (cs && frOf(s).length && !confirm(`Remove "${s.name}" and its friction notes?`)) return;
+      sc.steps.splice(sc.steps.indexOf(s), 1); unlink((x) => x === s.id || x.startsWith(s.id + ':'));
+      if (cs) { const gone = new Set(frOf(s).map((n) => n.id)); S.notes = S.notes.filter((n) => !gone.has(n.id)); unlink((x) => gone.has(x)); }
+      save(); draw();
+    };
+    const hd = handle(`Step ${i + 1}`, `Step ${i + 1}, ${s.name}`,
+      cs && PILOT.stepFocusStar && h('button', { class: 'wbx', title: 'Make this the focus', 'aria-label': 'Focus on ' + s.name, 'aria-pressed': String(S.focus === s.id), onclick: () => { S.focus = S.focus === s.id ? null : s.id; save(); draw(); } }, S.focus === s.id ? '★' : '☆'),
+      h('button', { class: 'wbx', title: 'Delete step', 'aria-label': 'Delete step ' + s.name, onclick: del }, '×'));
     el.append(hd, port(s.id, s.name), h('input', { class: 'wbtitle', value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }),
-      pen(h('textarea', { rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens in ' + s.name, oninput: (e) => { s.does = e.target.value; save(); } })));
+      cs && s.desc && h('p', { class: 'wbdesc' }, s.desc),
+      cs ? pen(h('textarea', { rows: 3, value: s.context || '', placeholder: 'Context: what actually happens here, systems, who does it…', 'aria-label': 'Context for ' + s.name, oninput: (e) => { s.context = e.target.value; save(); } }))
+        : pen(h('textarea', { rows: 3, value: s.does || '', placeholder: 'What happens here…', 'aria-label': 'What happens in ' + s.name, oninput: (e) => { s.does = e.target.value; save(); } })));
     pos(el, s.x, s.y);
     draggable(hd, () => {
       const x = s.x, y = s.y;
@@ -483,6 +503,32 @@ function whiteboard(sc) {
     });
     return (att[k][i] = el);
   };
+  // Today's process: the friction notes of step i, and a "+ friction" chip under the step.
+  const frictionCards = (s, i) => {
+    const list = frOf(s), out = [];
+    const chip = h('button', { class: 'wbchip', title: 'Add a friction point to this step', onclick: () => { const n = { id: uid(), zone: 'fr:' + s.id, text: '', color: 'pink' }; S.notes.push(n); save(); draw(); world.querySelector(`[data-node="${n.id}"] textarea`)?.focus(); } }, '+ friction');
+    pos(chip, s.x + 50, s.y + 168); out.push({ el: chip });
+    list.forEach((n, j) => {
+      const el = h('div', { class: 'wbcard wbnote wbfr c-' + (n.color || 'pink'), 'data-node': n.id });
+      const hd = handle('Friction', `Friction at ${s.name}`,
+        h('button', { class: 'wbx', title: 'Change colour', 'aria-label': 'Change colour', onclick: () => { n.color = COLORS[(COLORS.indexOf(n.color) + 1) % COLORS.length]; el.className = 'wbcard wbnote wbfr c-' + n.color; save(); } }, '◐'),
+        h('button', { class: 'wbx', title: 'Delete friction point', 'aria-label': 'Delete friction point', onclick: () => { S.notes = S.notes.filter((x) => x !== n); unlink((x) => x === n.id); save(); draw(); } }, '×'));
+      el.append(hd, port(n.id, 'friction point'), pen(h('textarea', { rows: 3, value: n.text, placeholder: 'Where is time, effort or quality lost here?', 'aria-label': 'Friction point at ' + s.name, oninput: (e) => { n.text = e.target.value; save(); } })));
+      pos(el, ...frAt(s, n, j));
+      // Drag it anywhere; dropped nearer another step, it becomes that step's friction point.
+      draggable(hd, () => {
+        const [x0, y0] = frAt(s, n, j);
+        return { move: (dx, dy) => { n.dx = x0 + dx - s.x; n.dy = y0 + dy - s.y; pos(el, ...frAt(s, n, j)); lines(); },
+          end: () => {
+            const cx = s.x + n.dx + el.offsetWidth / 2, near = sc.steps.reduce((b, t) => (Math.abs(t.x + 100 - cx) < Math.abs(b.x + 100 - cx) ? t : b), s);
+            if (near !== s) { const ax = s.x + n.dx, ay = s.y + n.dy; n.zone = 'fr:' + near.id; n.dx = ax - near.x; n.dy = ay - near.y; save(); draw(); toast(`Moved to "${near.name}".`); } else save();
+          } };
+      });
+      out.push({ el, n, j });
+    });
+    frEls[i] = out;
+    return out.map((f) => f.el);
+  };
   const noteCard = (n) => {
     const el = h('div', { class: 'wbcard wbnote c-' + n.color, 'data-node': n.id });
     const hd = handle('Note', 'Sticky note',
@@ -496,11 +542,12 @@ function whiteboard(sc) {
   };
 
   const draw = () => {
-    stepEls.length = att.human.length = att.agent.length = 0;
+    stepEls.length = att.human.length = att.agent.length = frEls.length = 0;
     const minX = sc.steps.length ? Math.min(...sc.steps.map((s) => s.x)) : 0;
     const lane = (top, label, cls) => [h('div', { class: 'wbband' + cls, style: `top:${top}px` }), h('div', { class: 'wblabel', style: `left:${minX - 140}px;top:${top + 70}px` }, label)];
-    world.replaceChildren(svg, ...lane(WB.human - 20, 'Human', ''), ...lane(-20, 'Orchestration', ' o'), ...lane(WB.agent - 20, 'Agents', ''),
-      ...sc.steps.flatMap((s, i) => [stepCard(s, i), attached(s, i, 'human'), attached(s, i, 'agent')]), ...sc.notes.map(noteCard), overlay, tsvg);
+    const lanes = cs ? [...lane(-20, 'Process', ' o'), ...lane(180, 'Friction', '')] : [...lane(WB.human - 20, 'Human', ''), ...lane(-20, 'Orchestration', ' o'), ...lane(WB.agent - 20, 'Agents', '')];
+    world.replaceChildren(svg, ...lanes,
+      ...sc.steps.flatMap((s, i) => (cs ? [stepCard(s, i), ...frictionCards(s, i)] : [stepCard(s, i), attached(s, i, 'human'), attached(s, i, 'agent')])), ...sc.notes.map(noteCard), overlay, tsvg);
     requestAnimationFrame(lines);
   };
   const center = () => ({ x: (vp.clientWidth / 2 - wbView.x) / wbView.z, y: (vp.clientHeight / 2 - wbView.y) / wbView.z });
@@ -510,7 +557,7 @@ function whiteboard(sc) {
   };
   const addStep = () => {
     const last = sc.steps[sc.steps.length - 1];
-    const n = { id: uid(), name: 'New step', does: '', agent: null, human: null, x: last ? last.x + WB.gap : 0, y: last ? last.y : 0 };
+    const n = { id: uid(), name: 'New step', ...(cs ? { desc: '' } : { does: '', agent: null, human: null }), x: last ? last.x + WB.gap : 0, y: last ? last.y : 0 };
     sc.steps.push(n); if (sc.links && last) sc.links.push({ from: last.id, to: n.id });
     save(); draw(); requestAnimationFrame(fit);
   };
@@ -695,17 +742,17 @@ const W = {
     return h('div', { class: 'panel' }, h('h3', {}, w.title, w.tip && info(w.tip)), h('div', { class: 'zgrid' }, w.zones.map((z) => zoneEl(z, zoneExtra(z)))));
   },
 
-  process: (w) => h('div', { class: 'panel' }, h('h3', {}, w.title, w.tip && info(w.tip)), h('p', { class: 'hint' }, 'Rename steps and add friction points under each. This process may not be your own — use the context box to note what actually happens at each step.'),
-    h('div', { class: 'proc' }, S.steps.map((s) => h('div', { class: 'pcol' },
-      h('div', { class: 'pill' + (S.focus === s.id ? ' focus' : '') },
-        PILOT.stepFocusStar && h('button', { title: 'Make this the focus', 'aria-label': 'Focus on ' + s.name, 'aria-pressed': String(S.focus === s.id), onclick: () => { S.focus = S.focus === s.id ? null : s.id; save(); renderStage(); } }, S.focus === s.id ? '★' : '☆'),
-        h('input', { value: s.name, 'aria-label': 'Step name', oninput: (e) => { s.name = e.target.value; save(); } }),
-        h('button', { title: 'Remove step', 'aria-label': 'Remove step ' + s.name, onclick: () => { if (!confirm(`Remove "${s.name}" and its notes?`)) return; S.steps = S.steps.filter((x) => x !== s); S.notes = S.notes.filter((n) => n.zone !== 'fr:' + s.id); save(); renderStage(); } }, '×')),
-      s.desc && h('p', { class: 'stepnote' }, s.desc),
-      zoneEl({ id: 'fr:' + s.id, label: 'Friction points', color: 'white', tip: 'Friction is where time, effort, information or quality is lost in this step — anything slow, manual, error-prone, duplicated or unclear.' }),
-      h('label', { class: 'stepctx' }, h('span', {}, 'Context'),
-        pen(h('textarea', { rows: 2, placeholder: 'What actually happens here: systems, who does it, inputs/outputs…', 'aria-label': 'Context for ' + s.name, value: s.context || '', oninput: (e) => { s.context = e.target.value; save(); } }))))),
-    h('button', { class: 'add', onclick: () => { S.steps.push({ id: uid(), name: 'New step', desc: '' }); save(); renderStage(); } }, '+ step'))),
+  // Today's process as a whiteboard: steps (with their context) on the Process row, friction sticky notes below each step.
+  process: (w) => {
+    S.cs ||= { notes: [] };
+    // The board edits S.steps and S.notes directly, so the rest of the app (coach, scenario, photo) keeps working; its own notes and arrows live in S.cs.
+    const m = { get steps() { return S.steps; }, get notes() { return S.cs.notes; }, set notes(v) { S.cs.notes = v; },
+      get links() { return S.cs.links; }, set links(v) { if (v === undefined) delete S.cs.links; else S.cs.links = v; } };
+    return h('div', { class: 'panel' }, h('h3', {}, w.title, w.tip && info(w.tip)),
+      h('p', { class: 'hint sop' }, 'Today\'s process on a whiteboard. Rename a step on its card and write its context below the name. Add friction with "+ friction" under a step; drag a friction note to another step to move it there. Drag steps to reorder (left to right is the order), use + on an arrow to add a step in between, and drag the background to move around.'),
+      whiteboard(m, 'cs', S.cs));
+  },
+
 
   vote: () => {
     const left = () => 2 - Object.values(S.votes).reduce((a, b) => a + b, 0);
