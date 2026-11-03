@@ -676,7 +676,7 @@ const W = {
     const rows = (S.rows[w.id] ||= Array.from({ length: w.min }, () => ({ who: 'both' })));
     const body = h('tbody');
     const cell = (r, c) => {
-      if (c.type === 'who') { const box = h('div', { class: 'who' }); const draw = () => box.replaceChildren(...[['human', '👤 Human'], ['both', '🤝 Both'], ['ai', '🤖 AI']].map(([v, l]) => h('button', { class: r.who === v ? 'on' : '', 'aria-pressed': String(r.who === v), onclick: () => { r.who = v; save(); draw(); } }, l))); draw(); return box; }
+      if (c.type === 'who') { const box = h('div', { class: 'who' }); const draw = () => box.replaceChildren(...[['human', '👤 Human'], ['both', '🤝 Both'], ['ai', '🤖 AI'], ['automation', '⚙️ Automation']].map(([v, l]) => h('button', { class: r.who === v ? 'on' : '', 'aria-pressed': String(r.who === v), onclick: () => { r.who = v; save(); draw(); } }, l))); draw(); return box; }
       if (c.type === 'signal') return h('select', { 'aria-label': c.label, onchange: (e) => { r.signal = e.target.value; save(); } }, h('option', { value: '' }, '–'), SIGNALS.map((s) => h('option', { value: String(s.n), selected: r.signal === String(s.n) }, `${s.n} · ${s.name}`)));
       return pen(h('textarea', { rows: 2, 'aria-label': c.label, placeholder: 'Type here…', value: r[c.id] || '', oninput: (e) => { r[c.id] = e.target.value; save(); } }));
     };

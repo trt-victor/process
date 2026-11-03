@@ -315,12 +315,12 @@ const full = [
   },
   {
     id: 'jobs', title: 'Current State · Jobs-to-be-Done', mins: 25,
-    objective: 'Identify the most important drivers for change and the key jobs-to-be-done. Explore what needs to be achieved, whether it is best suited for humans, AI or both, and why it matters for better outcomes.',
+    objective: 'Identify the most important drivers for change and the key jobs-to-be-done. Explore what needs to be achieved, whether it is best suited for humans, both, AI or plain automation, and why it matters for better outcomes.',
     steps: [
       { t: 'Identify the Jobs-to-be-Done', mins: 5, bk: 'Individual', d: 'Reflect on the selected process challenge and identify the most important jobs that need to be accomplished to achieve a successful outcome. Focus on what needs to be achieved, not how it is done today. Capture your ideas on sticky notes.' },
       { t: 'Share and Cluster', mins: 5, bk: 'Pairs', d: 'Share your ideas with a partner and discuss similarities, differences and emerging themes. Together, identify the jobs-to-be-done that are most critical to success.' },
       { t: 'Prioritize as a Group', mins: 5, bk: 'Groups', d: 'Review the identified jobs-to-be-done and agree on the most important ones. Focus on the jobs that would create the greatest value if they could be fulfilled more effectively.' },
-      { t: 'Human, AI, or Both?', mins: 10, bk: 'Groups', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, AI, or both. Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
+      { t: 'Human, Both, AI or Automation?', mins: 10, bk: 'Groups', d: 'For each prioritized job-to-be-done, discuss whether you would hand these jobs to humans, both, AI, or plain automation (fixed rules, no AI). Capture your choices and explain why. Consider the strengths each brings to achieving the desired outcome.' },
     ],
     ask: ['What are we actually trying to achieve here, regardless of today\'s tools?', 'Is this job judgement, or is it gathering and comparing?', 'What would a person still decide if everything were prepared for them?'],
     ideas: ['First time right at entry', 'Predict peaks to plan capacity', 'Clear governance on who may change what', 'Deliver on time'],
@@ -328,7 +328,7 @@ const full = [
       { type: 'game', game: 'sorter', label: 'Warm-up: Judgement or legwork?' },
       { type: 'rows', id: 'jtbd', title: 'Jobs-to-be-done', tip: 'A job-to-be-done is what must be achieved for a good outcome, described independently of today\'s tools or steps.', min: 4, cols: [
         { id: 'job', label: 'What are we trying to achieve?', type: 'text', tip: 'The result that matters, stated as an outcome — not the activity or the current way of doing it.' },
-        { id: 'who', label: 'Who should do the work?', type: 'who', tip: 'Human for judgement and relationships; AI for gathering, comparing and drafting; Both when AI prepares and a person decides.' },
+        { id: 'who', label: 'Who should do the work?', type: 'who', tip: 'Human for judgement and relationships; Both when AI prepares and a person decides; AI for gathering, comparing and drafting; Automation for fixed, rule-based work that needs no AI (workflow, RPA, integrations).' },
         { id: 'why', label: 'Why?', type: 'text', tip: 'Why that split is right — the strength each side brings to this job.' },
       ] },
       { type: 'challenges' },

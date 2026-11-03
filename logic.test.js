@@ -128,3 +128,11 @@ test('board photo: only known places are filled, the rest is listed as unplaced'
   assert.deepEqual(p.unplaced, ['Coffee', 'Lost', 'Stray']);
   assert.equal(L.parsePhoto('no json here', targets), null);
 });
+
+test('automation is a fourth choice: a rule-based lane, not an AI agent', () => {
+  const s = S(); s.rows.jtbd = [{ job: 'Post the order entry to the ERP', who: 'automation', why: '' }];
+  const sc = L.buildScenario(s);
+  assert.equal(sc.steps[1].agent, 'Order entry automation');
+  assert.equal(sc.steps[1].human, null);
+  assert.equal(L.parsePhoto('{"rows":[{"table":"t","cells":{"job":"x","who":"Automation"}}]}', [{ kind: 'rows', id: 't', label: 'T', cols: [{ id: 'job' }, { id: 'who', type: 'who' }] }]).rows[0].row.who, 'automation');
+});

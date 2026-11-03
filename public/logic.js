@@ -36,7 +36,8 @@ export function buildScenario(S) {
   // Words of 4+ letters, cut to 5 so "approve" meets "approval" and "exception" meets "exceptions".
   const words = (t) => new Set(((t || '').toLowerCase().match(/[a-z]{4,}/g) || []).map((w) => w.slice(0, 5)));
   const overlap = (a, b) => { const B = words(b); return [...words(a)].filter((w) => B.has(w)).length; };
-  const lane = (who, name) => ({ agent: who !== 'human' ? short(name, 22) + ' agent' : null, human: who === 'human' ? 'Does this step' : who === 'both' ? 'Reviews and decides' : null });
+  // automation = fixed, rule-based work without AI (workflow, RPA, integration)
+  const lane = (who, name) => ({ agent: who === 'automation' ? short(name, 22) + ' automation' : who !== 'human' ? short(name, 22) + ' agent' : null, human: who === 'human' ? 'Does this step' : who === 'both' ? 'Reviews and decides' : null });
   let mid;
   if (S.steps.length) {
     const used = new Set();
@@ -111,7 +112,7 @@ export function reimaginedSummary(S) {
     }
   } else {
     const jobs = (S.rows.jtbd || []).filter((r) => (r.job || '').trim());
-    for (const j of jobs.slice(0, 5)) out.push(`${j.job.trim()}${j.who === 'ai' ? ' — AI' : j.who === 'human' ? ' — human' : ' — human + AI'}`);
+    for (const j of jobs.slice(0, 5)) out.push(`${j.job.trim()}${j.who === 'ai' ? ' — AI' : j.who === 'automation' ? ' — automation' : j.who === 'human' ? ' — human' : ' — human + AI'}`);
   }
   if (!out.length) out.push(...zonesLike(S, 'dream_').slice(0, 4));
   return out.slice(0, 7);
@@ -279,8 +280,8 @@ Fit it to the team's use case: "${useCaseOf(S)}". Shape the flow around what tha
 Make the team's insights visible in the design: their friction points, design-question answers, risks and controls, exceptions, customer communication and learning loops should each show up in a step, a human decision or a guardrail. Respect "the system we trust" (context, guardrails, tools, checks, evidence) and any owners the team named.
 
 Work it out before you answer (do not write this part down):
-1. Extract: the goal and what success looks like; every current process step with its owner, tools and where it slows; the friction points per step; the jobs-to-be-done and whether a human, AI or both should do each; the dream-state ideas; the constraints, risks, tensions and exceptions; the use cases and their votes; anything in the current scenario or whiteboard notes the team already shaped.
-2. Decide, per current step, what changes: what an agent takes over, where a person must still judge or decide (respect every human/both choice in the jobs), which friction it removes, and how exceptions are handled.
+1. Extract: the goal and what success looks like; every current process step with its owner, tools and where it slows; the friction points per step; the jobs-to-be-done and whether a human, both, AI or plain automation (rule-based, no AI) should do each; the dream-state ideas; the constraints, risks, tensions and exceptions; the use cases and their votes; anything in the current scenario or whiteboard notes the team already shaped.
+2. Decide, per current step, what changes: what an agent takes over, where a person must still judge or decide (respect every human, both and automation choice in the jobs; automation means a rule-based workflow or integration, not an AI agent), which friction it removes, and how exceptions are handled.
 3. Build one coherent flow from trigger to finish that covers the whole process (merge or split steps where it makes the flow clearer), with explicit human decision points and an exception path.
 
 Then reply with only JSON, no other text: {"title": string, "tagline": string, "steps": [{"name": short step name, "does": one sentence naming the friction it removes or the job it does, "agent": agent name or null, "human": what a person does here or null}], "opportunity": 1-2 sentences, "value": 1-2 sentences}. 6 to 10 steps, starting with a trigger and ending with a finish state. Use only facts from the board; do not invent numbers.
@@ -431,7 +432,7 @@ Sticky-note areas [id] label:
 ${list('zone', (t) => `- [${t.id}] ${t.label}`)}
 Text fields [id] label:
 ${list('field', (t) => `- [${t.id}] ${t.label}`)}
-Tables [id] title: columns (who = human | ai | both):
+Tables [id] title: columns (who = human | both | ai | automation):
 ${list('rows', (t) => `- [${t.id}] ${t.label}: ${t.cols.map((c) => `${c.id}=${c.label}`).join(', ')}`)}
 
 Reply with only JSON: {"summary": "one sentence on what the photo shows", "notes": [{"zone": "id", "text": "...", "color": "yellow|orange|green|pink|purple|white"}], "fields": [{"id": "id", "text": "..."}], "rows": [{"table": "id", "cells": {"columnId": "..."}}], "unplaced": ["..."]}`;
@@ -457,7 +458,7 @@ export function parsePhoto(text, targets) {
     const row = {};
     for (const c of tb.cols) {
       const v = str(r.cells[c.id]);
-      if (c.type === 'who') row.who = ['human', 'ai', 'both'].includes(v.toLowerCase()) ? v.toLowerCase() : 'both';
+      if (c.type === 'who') row.who = ['human', 'ai', 'both', 'automation'].includes(v.toLowerCase()) ? v.toLowerCase() : 'both';
       else if (v) row[c.id] = v;
     }
     if (Object.keys(row).some((k) => k !== 'who')) out.rows.push({ id: tb.id, row });
