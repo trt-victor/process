@@ -852,12 +852,42 @@ function toBuilder() {
 /* ---------- stage ---------- */
 // The clock element is rebuilt on every render, so the interval looks it up by id.
 const resetTimer = () => { clearInterval(timer.id); timer = { left: stage().mins * 60, total: stage().mins * 60, id: null }; };
+const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 function showClock() {
   const c = $('clock'); if (!c) return;
-  c.textContent = `${String(Math.floor(timer.left / 60)).padStart(2, '0')}:${String(timer.left % 60).padStart(2, '0')}`;
-  const p = $('tplay'); p.textContent = timer.id ? '❚❚' : '▶'; p.setAttribute('aria-label', timer.id ? 'Pause timer' : 'Start timer');
+  c.textContent = $('fclock').textContent = mmss(timer.left);
+  for (const id of ['tplay', 'fplay']) { const p = $(id); p.textContent = timer.id ? '❚❚' : '▶'; p.setAttribute('aria-label', timer.id ? 'Pause timer' : 'Start timer'); }
   $('timer').classList.toggle('running', !!timer.id);
   $('tbar').style.width = `${timer.total ? Math.min(100, 100 * (1 - timer.left / timer.total)) : 0}%`;
+  updateActs();
+}
+// The activities follow the stage timer: their minutes are shares of the time set on the timer, and once it runs,
+// the activity that should be happening now is highlighted and opens by itself (the others close).
+let acts = null; // { rows: [{ s, el, label, left }], last } for the activities on screen
+function updateActs() {
+  if (!acts) return;
+  const timed = acts.rows.filter((r) => r.s.mins != null), base = timed.reduce((a, r) => a + r.s.mins, 0) || 1;
+  const total = timer.total || 0, elapsed = total - timer.left, started = elapsed > 0;
+  let end = 0, now = -1;
+  acts.rows.forEach((r, i) => {
+    if (r.s.mins == null) return;
+    const secs = total * r.s.mins / base;
+    r.label.textContent = secs < 60 ? `${Math.round(secs)} sec` : `${Math.round(secs / 60)} min`;
+    end += secs;
+    if (now < 0 && elapsed < end) { now = i; r.leftSec = end - elapsed; }
+  });
+  if (now < 0) { // time is up: an untimed activity after the timed ones (e.g. a group wrap-up), else the last one
+    const lastTimed = acts.rows.indexOf(timed[timed.length - 1]);
+    now = acts.rows.findIndex((r, i) => i > lastTimed && r.s.mins == null);
+    if (now < 0) now = Math.max(0, lastTimed);
+  }
+  acts.rows.forEach((r, i) => {
+    const on = started && i === now;
+    r.el.classList.toggle('now', on);
+    r.left.textContent = on && r.s.mins != null && timer.left ? `${mmss(r.leftSec)} left` : '';
+  });
+  if (started && now !== acts.last) { acts.rows.forEach((r, i) => { r.el.open = i === now; }); acts.last = now; }
+  $('fstep').textContent = started ? acts.rows[now]?.s.t || '' : '';
 }
 function tick() { timer.left = Math.max(0, timer.left - 1); if (!timer.left) { clearInterval(timer.id); timer.id = null; toast('Time is up for this stage. Wrap up and move on.'); } showClock(); }
 // Before starting (or while paused) the facilitator can change the time in one-minute steps.
@@ -882,6 +912,14 @@ function renderStage() {
   // Pilot visibility: hide warm-up games/steps and the Design-questions box, but keep the data and code (see PILOT in content.js).
   const widgets = shownWidgets(st);
   const steps = PILOT.hideWarmup ? st.steps.filter((s) => !/warm-?up/i.test(s.t)) : st.steps;
+  const actRows = steps.map((s) => ({ s, label: h('small', {}, `${s.mins} min`), left: h('small', { class: 'sleft', 'aria-live': 'off' }) }));
+  acts = { rows: actRows, last: -1 };
+  // A small copy of the timer floats at the top right once the big one has scrolled out of view.
+  const float = h('div', { class: 'tfloat', role: 'timer', 'aria-label': 'Stage timer' },
+    h('span', { class: 'fwrap' }, h('small', { id: 'fstep', class: 'fstep' }), h('span', { id: 'fclock', class: 'fclock' })),
+    h('button', { id: 'fplay', class: 'tplay', onclick: toggleTimer }, '▶'));
+  timerSeen?.disconnect();
+  timerSeen = new IntersectionObserver(([e]) => float.classList.toggle('show', !e.isIntersecting), { rootMargin: '-64px 0px 0px 0px' });
   const bkIcon = (b) => ({ Individual: '👤', Pairs: '👥', Groups: '👪', Plenary: '🗣' }[b] || '👥');
   const bkBadge = (b) => b && h('span', { class: 'breakout' }, `${bkIcon(b)} ${b}`);
   const tabs = h('nav', { class: 'tabs', 'aria-label': 'Stages' }, flow().stages.map((stg, i) =>
@@ -919,15 +957,17 @@ function renderStage() {
         h('section', { class: 'card acts' },
           h('div', { class: 'eyebrow dark' }, 'Activities'),
           h('p', { class: 'start' }, h('b', {}, 'Where to start · '), `Begin with step 1${steps[0] ? `: ${steps[0].t}` : ''}. Open a step to read its explanation. The coach on the right can help any time.`),
-          h('ol', { class: 'timeline' }, steps.map((s, i) => h('li', {},
-            h('details', { class: 'step', open: i === 0 },
+          h('ol', { class: 'timeline' }, actRows.map((r, i) => h('li', {},
+            (r.el = h('details', { class: 'step', open: i === 0 },
               h('summary', {}, h('span', { class: 'snum' }, String(i + 1)),
-                h('span', { class: 'stitle' }, h('b', {}, s.t), h('span', { class: 'smeta' }, s.mins != null && h('small', {}, `${s.mins} min`), bkBadge(s.bk || BREAKOUT[st.id])))),
-              h('p', {}, s.d)))))),
+                h('span', { class: 'stitle' }, h('b', {}, r.s.t), h('span', { class: 'smeta' }, r.s.mins != null && r.label, bkBadge(r.s.bk || BREAKOUT[st.id]), r.left))),
+              h('p', {}, r.s.d))))))),
         h('details', { class: 'card qs' }, h('summary', {}, h('span', { class: 'qicon', 'aria-hidden': 'true' }, '?'), 'Questions along the way'), h('ul', {}, st.ask.map((q) => h('li', {}, q)))),
         h('div', { class: 'bar stagenav' }, S.stage > 0 && h('button', { class: 'ghost', onclick: () => go(-1) }, '‹  Back'), S.stage < n - 1 && h('button', { class: 'primary', onclick: () => go(1) }, 'Next stage  ›'))),
       h('main', { class: 'board' }, widgets.map((w) => W[w.type](w))),
-      chatOpen && chatPanel()));
+      chatOpen && chatPanel()),
+    float);
+  timerSeen.observe(timerCard);
   showClock(); scrollTo(0, y);
 }
 
@@ -1032,6 +1072,7 @@ const shrinkPhoto = (file) => new Promise((ok, bad) => {
   img.onerror = () => { URL.revokeObjectURL(img.src); bad(new Error('Not an image this browser can open')); };
   img.src = URL.createObjectURL(file);
 });
+let timerSeen = null; // watches whether the big timer is on screen
 let photoPlan = null; // { stage, image, plan } waiting for the team to add or discard; not saved
 
 function chatPanel() {
