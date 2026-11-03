@@ -9,9 +9,19 @@ export const PILOT = {
   hideSignalsArcade: true,   // the "Signals" and "Arcade" buttons in the stage toolbar
   hideDesignQuestions: true, // the "Design questions for the chosen use case" box in Prioritize
   hidePrioritize: true,      // the whole Prioritize stage (its use-case voting now lives on the Scenario tab)
-  stepFocusStar: false,
-  hideDeepDiveCanvas: true,  // the original Deep Dive & Prototype page (prompt canvas + build button); its duplicate shows only the build prompt, pre-filled from the earlier pages      // the ☆ star-to-focus control in the process overview box
+  stepFocusStar: false,      // the ☆ star-to-focus control in the process overview box
+  hideDeepDiveCanvas: true,  // the original Deep Dive & Prototype page (prompt canvas + build button); its duplicate shows only the build prompt, pre-filled from the earlier pages
 };
+
+// The same switches as people see them in the "Hidden" menu (top right). hides: the value that hides the piece.
+export const PILOT_PIECES = [
+  { key: 'hidePrioritize', hides: true, label: 'Prioritize stage', note: 'The whole stage. Its use-case voting also lives on the Scenario stage.' },
+  { key: 'hideDeepDiveCanvas', hides: true, label: 'Original Deep Dive page', note: 'The page with the solution-prompt canvas and the build button. Showing it replaces the prompt-only Deep Dive page.' },
+  { key: 'hideWarmup', hides: true, label: 'Warm-up games', note: 'The warm-up game and its step at the top of a stage.' },
+  { key: 'hideSignalsArcade', hides: true, label: 'Signals and Arcade buttons', note: 'In this top bar: the six signals and the games.' },
+  { key: 'hideDesignQuestions', hides: true, label: 'Design questions box', note: 'On the Prioritize stage: nine questions about the chosen use case.' },
+  { key: 'stepFocusStar', hides: false, label: 'Focus star on process steps', note: 'On Today\'s Reality: the ☆ to pick one step as the focus.' },
+];
 
 // Breakout format shown next to each stage's explanation. Keyed by stage id (deepDive id is 'deep').
 export const BREAKOUT = {

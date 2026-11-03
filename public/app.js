@@ -1,7 +1,7 @@
-import { FLOWS, CASES, SIGNALS, GAMES, COLORS, CHALLENGES, PRINCIPLES, PILOT, BREAKOUT } from './content.js';
+import { FLOWS, CASES, SIGNALS, GAMES, COLORS, CHALLENGES, PRINCIPLES, PILOT, PILOT_PIECES, BREAKOUT } from './content.js';
 import * as L from './logic.js';
 
-const KEY = 'reimagine-v2', CKEY = 'reimagine-cases', AKEY = 'reimagine-ai';
+const KEY = 'reimagine-v2', CKEY = 'reimagine-cases', AKEY = 'reimagine-ai', PKEY = 'reimagine-shown';
 const newId = () => crypto.randomUUID?.() || '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
 const blank = () => ({ sid: newId(), updatedAt: 0, mode: null, name: '', caseName: '', caseId: null, brief: '', quotes: [], probe: null, ev: {}, stage: 0, f: {}, notes: [], rows: {}, steps: [], focus: null, votes: {}, svotes: {}, scenario: null, proto: '', chat: [], score: {} });
 let S = blank();
@@ -904,7 +904,8 @@ function renderStage() {
         tool('◌', chatOpen ? 'Hide coach' : 'Coach', () => { chatOpen = !chatOpen; renderStage(); }),
         h('span', { class: 'tsep', 'aria-hidden': 'true' }),
         tool('⌂', 'Home', () => { home = true; render(); }, { title: 'Back to the start screen; your board is kept' }),
-        tool('↻', 'Restart', () => { if (confirm('Start over? This clears your whole board.')) { S = blank(); save(); render(); } }))),
+        tool('↻', 'Restart', () => { if (confirm('Start over? This clears your whole board.')) { S = blank(); save(); render(); } }),
+        hiddenTool(tool))),
     tabs,
     h('section', { class: 'hero' },
       h('div', { class: 'capsules', 'aria-hidden': 'true' }, [0, 1, 2, 3, 4].map(() => h('i'))),
@@ -969,6 +970,32 @@ async function stream(body, onText) {
 }
 // The widgets a stage shows (pilot switches hide some, see PILOT in content.js).
 const shownWidgets = (st) => st.widgets.filter((w) => !(PILOT.hideWarmup && w.type === 'game' && /warm-?up/i.test(w.label || '')) && !(PILOT.hideDesignQuestions && w.type === 'fields' && /^design questions/i.test(w.title || '')));
+
+/* ---------- hidden pieces: show what the pilot switches hide, and bring them back ---------- */
+// Choices are kept in this browser only (they change what this screen shows, not anyone else's).
+try { Object.assign(PILOT, Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(PKEY)) || {}).filter(([k, v]) => k in PILOT && typeof v === 'boolean'))); } catch { /* defaults */ }
+const isHidden = (p) => PILOT[p.key] === p.hides;
+function setShown(p, show) {
+  const id = stage()?.id; // stay on the same stage when stages appear or disappear
+  PILOT[p.key] = show ? !p.hides : p.hides;
+  const mine = Object.fromEntries(PILOT_PIECES.map((x) => [x.key, PILOT[x.key]]));
+  try { localStorage.setItem(PKEY, JSON.stringify(mine)); } catch { /* private mode: this visit only */ }
+  const i = flow()?.stages.findIndex((s) => s.id === id);
+  if (i >= 0) S.stage = i;
+  save();
+}
+function hiddenTool(tool) {
+  const n = PILOT_PIECES.filter(isHidden).length;
+  const open = () => dialog('Hidden pieces', [
+    h('p', { class: 'hint' }, 'Parts of the session that are switched off for this pilot. Tick one to show it again; untick to hide it. This only changes this browser.'),
+    h('div', { class: 'hiddenlist' }, PILOT_PIECES.map((p) => h('label', { class: 'hiddenrow' },
+      h('input', { type: 'checkbox', checked: !isHidden(p), onchange: (e) => { setShown(p, e.target.checked); open(); } }),
+      h('span', {}, h('b', {}, p.label), h('small', {}, p.note)),
+      h('em', { class: isHidden(p) ? 'off' : 'on' }, isHidden(p) ? 'Hidden' : 'Shown')))),
+    h('div', { class: 'bar' }, h('button', { class: 'ghost', onclick: () => { try { localStorage.removeItem(PKEY); } catch { /* ignore */ } location.reload(); } }, 'Back to the pilot defaults')),
+  ]);
+  return tool('◐', n ? `Hidden (${n})` : 'Hidden', open, { title: 'See which pieces are hidden and show them again', 'aria-haspopup': 'dialog' });
+}
 
 /* ---------- board photo: read real sticky notes into this stage ---------- */
 // What a photo can fill on the current stage, with the labels people see on screen.

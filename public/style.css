@@ -452,3 +452,12 @@ dialog>header{display:flex;justify-content:space-between;align-items:center;padd
 .photoplan img{width:100%;max-height:160px;object-fit:cover;border-radius:8px}
 .photoplan ul{margin:0;padding-left:18px;max-height:220px;overflow:auto;font-size:12.5px}
 .photoplan .bar{margin:4px 0 0}
+/* Hidden pieces menu */
+.hiddenlist{display:flex;flex-direction:column;gap:6px;margin:8px 0 12px}
+.hiddenrow{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.hiddenrow input{width:auto;margin-top:3px}
+.hiddenrow span{flex:1;display:flex;flex-direction:column;gap:2px}
+.hiddenrow small{color:var(--grey)}
+.hiddenrow em{font-style:normal;font-size:11.5px;font-weight:700;border-radius:99px;padding:2px 9px;align-self:center}
+.hiddenrow em.off{background:var(--bg);color:var(--grey)}
+.hiddenrow em.on{background:var(--yellow-soft);color:var(--ink)}
