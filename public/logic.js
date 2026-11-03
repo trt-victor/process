@@ -146,7 +146,7 @@ export function snapshot(S, flow) {
   if (uc.length) out.push('Use cases: ' + uc.join(' · '));
   if (S.scenario) {
     out.push(`Current scenario "${S.scenario.title}" (${S.scenario.tagline || ''}):`);
-    for (const s of S.scenario.steps) out.push(`  - ${s.name}: ${s.does || ''}${s.agent ? ` [agent: ${s.agent}]` : ''}${s.human ? ` [human: ${s.human}]` : ''}`);
+    for (const s of S.scenario.steps) out.push(`  - ${s.name}: ${s.does || ''}${s.agent ? ` [agent: ${s.agent}${s.agentOwner ? `, owner: ${s.agentOwner}` : ''}]` : ''}${s.human ? ` [human: ${s.human}${s.humanOwner ? `, owner: ${s.humanOwner}` : ''}]` : ''}`);
     const wn = (S.scenario.notes || []).map((n) => n.text.trim()).filter(Boolean);
     if (wn.length) out.push('Whiteboard notes: ' + wn.join(' · '));
   }
@@ -276,7 +276,7 @@ export const designQuestions = () => Object.values(FLOWS).flatMap((f) => f.stage
 const useCaseOf = (S) => S.f.usecase?.trim() || S.notes.filter((n) => n.zone === 'usecases' && n.text.trim()).sort((a, b) => (S.votes[b.id] || 0) - (S.votes[a.id] || 0))[0]?.text.trim() || '';
 export const scenarioPrompt = (S, flow) => `Design the full reimagined, AI-powered end-to-end process for this team, using everything on their board below.${useCaseOf(S) ? `
 Fit it to the team's use case: "${useCaseOf(S)}". Shape the flow around what that use case needs.` : ''}
-Make the team's insights visible in the design: their friction points, design-question answers, risks and controls, exceptions, customer communication and learning loops should each show up in a step, a human decision or a guardrail.
+Make the team's insights visible in the design: their friction points, design-question answers, risks and controls, exceptions, customer communication and learning loops should each show up in a step, a human decision or a guardrail. Respect "the system we trust" (context, guardrails, tools, checks, evidence) and any owners the team named.
 
 Work it out before you answer (do not write this part down):
 1. Extract: the goal and what success looks like; every current process step with its owner, tools and where it slows; the friction points per step; the jobs-to-be-done and whether a human, AI or both should do each; the dream-state ideas; the constraints, risks, tensions and exceptions; the use cases and their votes; anything in the current scenario or whiteboard notes the team already shaped.
@@ -313,7 +313,9 @@ Build a small, clickable web app prototype.
 `;
   }
   const cfg = protoConfig(S);
-  const steps = cfg.steps.map((s, i) => `${i + 1}. **${s.name}**${s.agent ? ` — AI agent: ${s.agent}` : ''}${s.human ? ' — human decides / handles exceptions' : ''}`).join('\n') || '1. Intake\n2. Process\n3. Review\n4. Deliver';
+  const sc = S.scenario?.steps || [];
+  const steps = cfg.steps.map((s, i) => `${i + 1}. **${s.name}**${s.agent ? ` — AI agent: ${s.agent}` : ''}${sc[i]?.agentOwner ? ` (owner: ${sc[i].agentOwner})` : ''}${s.human ? ' — human decides / handles exceptions' : ''}${sc[i]?.humanOwner ? ` (owner: ${sc[i].humanOwner})` : ''}`).join('\n') || '1. Intake\n2. Process\n3. Review\n4. Deliver';
+  const trust = [['Context', 't_context'], ['Guardrails', 't_guard'], ['Tools', 't_tools'], ['Checks', 't_checks'], ['Evidence', 't_evidence']].map(([l, z]) => [l, zone(S, z)]).filter(([, n]) => n.length);
   return `# Replit build prompt — ${cfg.title}
 
 Build a working, clickable **web app prototype** for the use case below as one self-contained single-page app (HTML/CSS/JS is fine). Use realistic sample data, usable at 900px wide. Keep it simple and realistic as a first prototype.
@@ -338,7 +340,7 @@ ${steps}
 - What the AI / agents prepare automatically.
 - Where a person steps in to decide or handle exceptions.
 - The one number that proves the value, shown prominently.
-${cfg.data ? `\n## Data\n${cfg.data}\n` : ''}${(S.f.tech || '').trim() ? `\n## Tech / integration\n${S.f.tech.trim()}\n` : ''}
+${trust.length ? `\n## The system we trust\n${trust.map(([l, n]) => `- **${l}:** ${n.join('; ')}`).join('\n')}\n` : ''}${cfg.data ? `\n## Data\n${cfg.data}\n` : ''}${(S.f.tech || '').trim() ? `\n## Tech / integration\n${S.f.tech.trim()}\n` : ''}
 ## Build notes
 - One happy path and one exception path.
 - No real credentials or external calls; mock everything.

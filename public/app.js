@@ -472,7 +472,10 @@ function whiteboard(sc) {
     }
     const el = h('div', { class: `wbcard wb${k}`, 'data-att': k + i, 'data-node': `${s.id}:${k}` });
     const hd = handle(label, `${label} for ${s.name}`, h('button', { class: 'wbx', title: 'Remove', 'aria-label': `Remove ${label.toLowerCase()} from ${s.name}`, onclick: () => { s[k] = null; delete s[k + 'dx']; delete s[k + 'dy']; unlink((x) => x === `${s.id}:${k}`); save(); draw(); } }, '×'));
-    el.append(hd, port(`${s.id}:${k}`, `${label.toLowerCase()} of ${s.name}`), pen(h('textarea', { rows: 2, value: s[k], placeholder: k === 'human' ? 'What a person does here…' : 'What the agent does…', 'aria-label': `${label} in ${s.name}`, oninput: (e) => { s[k] = e.target.value; save(); } })));
+    el.append(hd, port(`${s.id}:${k}`, `${label.toLowerCase()} of ${s.name}`), pen(h('textarea', { rows: 2, value: s[k], placeholder: k === 'human' ? 'What a person does here…' : 'What the agent does…', 'aria-label': `${label} in ${s.name}`, oninput: (e) => { s[k] = e.target.value; save(); } })),
+      h('label', { class: 'wbowner' + (s[k + 'Owner'] ? '' : ' empty') }, h('span', {}, 'Owner'),
+        h('input', { value: s[k + 'Owner'] || '', placeholder: k === 'human' ? 'Who decides (role)' : 'Who answers for it (role)', 'aria-label': `Owner of the ${label.toLowerCase()} in ${s.name}`,
+          oninput: (e) => { s[k + 'Owner'] = e.target.value.trim() || undefined; e.target.parentNode.classList.toggle('empty', !s[k + 'Owner']); save(); } })));
     pos(el, ...at(s, k));
     draggable(hd, () => {
       const dx0 = s[k + 'dx'] || 0, dy0 = s[k + 'dy'] ?? WB[k];
@@ -977,7 +980,7 @@ function renderStage() {
               h('p', {}, r.s.d))))))),
         h('details', { class: 'card qs' }, h('summary', {}, h('span', { class: 'qicon', 'aria-hidden': 'true' }, '?'), 'Questions along the way'), h('ul', {}, st.ask.map((q) => h('li', {}, q)))),
         h('div', { class: 'bar stagenav' }, S.stage > 0 && h('button', { class: 'ghost', onclick: () => go(-1) }, '‹  Back'), S.stage < n - 1 && h('button', { class: 'primary', onclick: () => go(1) }, 'Next stage  ›'))),
-      h('main', { class: 'board' }, widgets.map((w) => W[w.type](w))),
+      h('main', { class: 'board' }, widgets.map((w) => foldable(st, w))),
       right),
     float);
   timerSeen.observe(timerCard);
@@ -1024,6 +1027,23 @@ async function stream(body, onText) {
 // The widgets a stage shows (pilot switches hide some, see PILOT in content.js).
 const shownWidgets = (st) => st.widgets.filter((w) => !(PILOT.hideWarmup && w.type === 'game' && /warm-?up/i.test(w.label || '')) && !(PILOT.hideDesignQuestions && w.type === 'fields' && /^design questions/i.test(w.title || '')));
 
+/* ---------- fold any box on a page: − hides it to a slim bar, + shows it again ---------- */
+// Lets the facilitator tailor the workshop page by page. Kept in this browser, like the Hidden menu.
+const FKEY = 'reimagine-folded';
+let folded = new Set();
+try { folded = new Set(JSON.parse(localStorage.getItem(FKEY)) || []); } catch { /* none */ }
+const NAMES = { brief: 'Case brief', scenario: 'Your reimagined scenario', vote: 'Use cases', process: 'Process overview', promptproto: 'Your prototype prompt', prototype: 'Working prototype', mail: 'Mail draft', summary: 'Summary', challenges: 'Challenge cards', tell: 'Leaderboard', spotbar: 'Strong-spot bar' };
+function foldable(st, w) {
+  const key = `${st.id}:${w.id || w.title || w.label || w.type}`, name = w.title || w.label || NAMES[w.type] || w.type;
+  const set = (hide) => { hide ? folded.add(key) : folded.delete(key); try { localStorage.setItem(FKEY, JSON.stringify([...folded])); } catch { /* this visit only */ } renderStage(); };
+  if (folded.has(key)) return h('div', { class: 'panel folded' }, h('button', { class: 'fold', title: 'Show this box', 'aria-label': 'Show ' + name, 'aria-expanded': 'false', onclick: () => set(false) }, '+'), h('span', {}, name), h('small', {}, 'Hidden'));
+  const el = W[w.type](w);
+  const btn = h('button', { class: 'fold', title: 'Hide this box', 'aria-label': 'Hide ' + name, 'aria-expanded': 'true', onclick: (e) => { e.preventDefault(); e.stopPropagation(); set(true); } }, '−');
+  const head = el.querySelector('h3');
+  if (head) head.prepend(btn); else { el.classList.add('hasfold'); el.prepend(btn); }
+  return el;
+}
+
 /* ---------- hidden pieces: show what the pilot switches hide, and bring them back ---------- */
 // Choices are kept in this browser only (they change what this screen shows, not anyone else's).
 try { Object.assign(PILOT, Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(PKEY)) || {}).filter(([k, v]) => k in PILOT && typeof v === 'boolean'))); } catch { /* defaults */ }
@@ -1038,14 +1058,16 @@ function setShown(p, show) {
   save();
 }
 function hiddenTool(tool) {
-  const n = PILOT_PIECES.filter(isHidden).length;
+  const n = PILOT_PIECES.filter(isHidden).length + folded.size;
   const open = () => dialog('Hidden pieces', [
     h('p', { class: 'hint' }, 'Parts of the session that are switched off for this pilot. Tick one to show it again; untick to hide it. This only changes this browser.'),
     h('div', { class: 'hiddenlist' }, PILOT_PIECES.map((p) => h('label', { class: 'hiddenrow' },
       h('input', { type: 'checkbox', checked: !isHidden(p), onchange: (e) => { setShown(p, e.target.checked); open(); } }),
       h('span', {}, h('b', {}, p.label), h('small', {}, p.note)),
       h('em', { class: isHidden(p) ? 'off' : 'on' }, isHidden(p) ? 'Hidden' : 'Shown')))),
-    h('div', { class: 'bar' }, h('button', { class: 'ghost', onclick: () => { try { localStorage.removeItem(PKEY); } catch { /* ignore */ } location.reload(); } }, 'Back to the pilot defaults')),
+    folded.size > 0 && h('p', { class: 'hint' }, `${folded.size} box${folded.size === 1 ? '' : 'es'} folded away with − on the pages. Press + on a box to show it again, or `,
+      h('button', { class: 'add', onclick: () => { folded.clear(); try { localStorage.removeItem(FKEY); } catch { /* ignore */ } $('dlg').close(); renderStage(); } }, 'show all boxes')),
+    h('div', { class: 'bar' }, h('button', { class: 'ghost', onclick: () => { try { localStorage.removeItem(PKEY); localStorage.removeItem(FKEY); } catch { /* ignore */ } location.reload(); } }, 'Back to the pilot defaults')),
   ]);
   return tool('◐', n ? `Hidden (${n})` : 'Hidden', open, { title: 'See which pieces are hidden and show them again', 'aria-haspopup': 'dialog' });
 }

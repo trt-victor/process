@@ -368,6 +368,13 @@ const full = [
         { id: 'r_exc', label: 'Exception handling', color: 'pink' }, { id: 'r_imp', label: 'Process impact', color: 'green' },
         { id: 'r_risk', label: 'Risks & controls', color: 'purple' }, { id: 'r_learn', label: 'Learning & feedback loops', color: 'white' },
       ] },
+      { type: 'notes', title: 'The system we trust', tip: 'What has to be in place before the owner trusts the agents: what they know, what they may do, what they use, how they are checked and what proves it works.', zones: [
+        { id: 't_context', label: 'Context', hint: 'What the agents need to know, and where it comes from', color: 'yellow' },
+        { id: 't_guard', label: 'Guardrails', hint: 'What they may do alone, must never do, and when they hand over', color: 'pink' },
+        { id: 't_tools', label: 'Tools', hint: 'The systems and AI they use: already in our tools, to switch on, or to build', color: 'green' },
+        { id: 't_checks', label: 'Checks', hint: 'Reviews, tests and controls, and who does them', color: 'orange' },
+        { id: 't_evidence', label: 'Evidence', hint: 'What proves after a month that it works and can be trusted', color: 'purple' },
+      ] },
     ],
   },
   {
