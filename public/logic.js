@@ -1,5 +1,5 @@
 // Pure logic (no DOM) so it runs in the browser and in `node --test`.
-import { PILOT, CASES } from './content.js';
+import { PILOT, CASES, FLOWS } from './content.js';
 
 const PITCH = /\b(a\.?i\.?|artificial intelligence|agents?|agentic|llms?|gpt|chatgpt|copilot|claude|gemini|machine learning|rpa|bots?|chatbots?)\b/i;
 export const isPitch = (t) => PITCH.test(t || '');
@@ -137,6 +137,9 @@ export function snapshot(S, flow) {
     if (w.type === 'rows') for (const r of S.rows[w.id] || []) { const v = w.cols.map((c) => r[c.id]).filter(Boolean); if (v.length > 1 || (v[0] && v[0] !== 'both')) out.push(`${w.title}: ${w.cols.map((c) => `${c.label}=${r[c.id] || '-'}`).join(' | ')}`); }
     if (w.type === 'notes') for (const z of w.zones) { const n = zone(S, z.id); if (n.length) out.push(`${z.label}: ${n.join(' · ')}`); }
   }
+  // The design questions can be answered on the Scenario stage even when their own stage is hidden.
+  const dq = designQuestions();
+  if (dq && !flow.stages.some((st) => st.widgets.includes(dq))) for (const f of dq.fields) if ((S.f[f.id] || '').trim()) out.push(`Design question: ${f.label} ${S.f[f.id].trim()}`);
   for (const s of S.steps) { const n = zone(S, 'fr:' + s.id); if (n.length) out.push(`Friction at "${s.name}": ${n.join(' · ')}`); }
   for (const s of S.steps) if ((s.context || '').trim()) out.push(`Context for "${s.name}": ${s.context.trim()}`);
   const uc = S.notes.filter((n) => n.zone === 'usecases' && n.text.trim()).map((n) => `${n.text.trim()} (${S.votes[n.id] || 0} votes)`);
@@ -269,7 +272,11 @@ export const protoPrompt = (S, flow, change, prev) => `Build a working, clickabl
 ${snapshot(S, flow)}
 Prototype config: ${JSON.stringify(protoConfig(S))}${change ? `\n\nRequested change: ${change}\n\nCurrent prototype to modify:\n${prev}` : ''}`;
 
-export const scenarioPrompt = (S, flow) => `Design the full reimagined, AI-powered end-to-end process for this team, using everything on their board below.
+export const designQuestions = () => Object.values(FLOWS).flatMap((f) => f.stages).flatMap((s) => s.widgets).find((w) => w.type === 'fields' && /^design questions/i.test(w.title || ''));
+const useCaseOf = (S) => S.f.usecase?.trim() || S.notes.filter((n) => n.zone === 'usecases' && n.text.trim()).sort((a, b) => (S.votes[b.id] || 0) - (S.votes[a.id] || 0))[0]?.text.trim() || '';
+export const scenarioPrompt = (S, flow) => `Design the full reimagined, AI-powered end-to-end process for this team, using everything on their board below.${useCaseOf(S) ? `
+Fit it to the team's use case: "${useCaseOf(S)}". Shape the flow around what that use case needs.` : ''}
+Make the team's insights visible in the design: their friction points, design-question answers, risks and controls, exceptions, customer communication and learning loops should each show up in a step, a human decision or a guardrail.
 
 Work it out before you answer (do not write this part down):
 1. Extract: the goal and what success looks like; every current process step with its owner, tools and where it slows; the friction points per step; the jobs-to-be-done and whether a human, AI or both should do each; the dream-state ideas; the constraints, risks, tensions and exceptions; the use cases and their votes; anything in the current scenario or whiteboard notes the team already shaped.

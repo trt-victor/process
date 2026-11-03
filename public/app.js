@@ -42,7 +42,7 @@ function markUrl() {
   if (location.search !== want) history.replaceState(null, '', location.pathname + want);
 }
 const uid = () => Math.random().toString(36).slice(2, 9);
-let AI = false, PROV = {}, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, home = false, live = [];
+let AI = false, PROV = {}, activeZone = 'parking', timer = { left: 0, id: null }, chatOpen = true, actsOpen = true, dqOpen = true, home = false, live = [];
 let custom = [];
 let protoTab = 'prompt', protoBusy = false;
 try { custom = JSON.parse(localStorage.getItem(CKEY)) || []; } catch { /* no saved processes */ }
@@ -734,6 +734,12 @@ const W = {
     const sv = (S.svotes ||= {});
     const star = (title) => h('button', { class: 'sstar' + (sv[title] ? ' on' : ''), 'aria-pressed': String(!!sv[title]), title: 'Vote for this scenario', onclick: (e) => { e.stopPropagation(); sv[title] = sv[title] ? 0 : 1; save(); renderStage(); } },
       h('span', { 'aria-hidden': 'true' }, sv[title] ? '★' : '☆'), sv[title] ? 'Voted' : 'Vote');
+    if (!sc && PILOT.hideScenarioOptions) {
+      box.append(h('h3', {}, 'Your reimagined scenario'),
+        h('p', { class: 'hint' }, AI ? 'The coach builds one scenario from everything on your board: the process and its friction, your jobs and who should do them, the dream state, your use case and the design questions on the right. You then shape it on a whiteboard.'
+          : 'Build one scenario from everything on your board, then shape it on a whiteboard. Connect a model (⚙ in the coach) to have AI design it.'), bar);
+      return box;
+    }
     if (!sc) {
       const presets = L.scenarioPresets(S);
       box.append(h('h3', {}, 'Your reimagined scenario'), h('p', { class: 'hint' }, 'Start from a ready-made pattern for this process, or draft one from your board.'),
@@ -749,7 +755,7 @@ const W = {
       h('p', { class: 'hint sop' }, 'Your reimagined process on a whiteboard. Drag the background to move around, scroll to pan, ctrl/⌘ + scroll or + − to zoom. Drag any card by its header: left to right is the step order. Human cards sit above a step, agent cards below, and they move with it. Double-click empty space for a sticky note.'),
       whiteboard(sc),
       h('div', { class: 'fgrid scmeta' }, h('div', {}, h('b', {}, 'Opportunity'), h('p', {}, sc.opportunity)), h('div', {}, h('b', {}, 'Why does this matter?'), h('p', {}, sc.value))),
-      h('button', { class: 'add', onclick: () => { S.scenario = null; save(); renderStage(); } }, '↩ See other options'), bar);
+      h('button', { class: 'add', onclick: () => { if (PILOT.hideScenarioOptions && !confirm('Start the scenario again? The whiteboard is cleared.')) return; S.scenario = null; save(); renderStage(); } }, PILOT.hideScenarioOptions ? '↩ Start again' : '↩ See other options'), bar);
     return box;
   },
 
@@ -925,6 +931,12 @@ function renderStage() {
   const tabs = h('nav', { class: 'tabs', 'aria-label': 'Stages' }, flow().stages.map((stg, i) =>
     h('button', { class: 'tab' + (i === S.stage ? ' on' : i < S.stage ? ' done' : ''), 'aria-current': i === S.stage ? 'step' : null, title: stg.title, onclick: () => jump(i) },
       h('span', { class: 'tabnum' }, i < S.stage ? '✓' : String(i + 1)), h('span', {}, stg.title.split('·').pop().trim()))));
+  // Right column: the coach, and on the Scenario stage the design questions, folded open or shut under it.
+  const dq = st.id === 'scenario' && L.designQuestions();
+  const dqBox = dq && h('details', { class: 'card dq', open: dqOpen, ontoggle: (e) => { dqOpen = e.target.open; } },
+    h('summary', {}, h('span', { class: 'qicon', 'aria-hidden': 'true' }, '?'), 'Design questions', h('small', {}, 'They feed the AI scenario')),
+    W.fields({ ...dq, cols: false, title: 'Answer for your use case' }));
+  const right = (chatOpen || dqBox) && h('div', { class: 'rightcol' }, chatOpen && chatPanel(), dqBox);
   const tool = (icon, label, onclick, extra = {}) => h('button', { class: 'tool', onclick, ...extra }, h('span', { class: 'ti', 'aria-hidden': 'true' }, icon), label);
   $('app').replaceChildren(
     h('header', { class: 'appbar' },
@@ -939,6 +951,7 @@ function renderStage() {
           h('input', { readOnly: true, value: sessionUrl(), onfocus: (e) => e.target.select(), 'aria-label': 'Session link' }),
           h('p', { class: 'hint' }, 'Copied to the clipboard. Use one device at a time: the last change saved wins.')]); }, { title: 'Link to this saved session' }),
         !PILOT.hideSignalsArcade && tool('◫', 'Arcade', () => dialog('Arcade', Object.entries(GAMES).map(([k, g]) => h('button', { class: 'gamecta', onclick: () => openGame(k) }, '🎲 ' + g.title, h('small', {}, S.score[k] != null ? `best: ${S.score[k]} pts` : g.intro))))),
+        tool('☰', actsOpen ? 'Hide activities' : 'Activities', () => { actsOpen = !actsOpen; renderStage(); }, { 'aria-pressed': String(actsOpen) }),
         tool('◌', chatOpen ? 'Hide coach' : 'Coach', () => { chatOpen = !chatOpen; renderStage(); }),
         h('span', { class: 'tsep', 'aria-hidden': 'true' }),
         tool('⌂', 'Home', () => { home = true; render(); }, { title: 'Back to the start screen; your board is kept' }),
@@ -952,8 +965,8 @@ function renderStage() {
         h('h1', {}, st.title),
         h('div', { class: 'obj' }, h('b', {}, 'Objective'), h('p', {}, st.objective))),
       timerCard),
-    h('div', { class: 'layout' + (chatOpen ? '' : ' nochat') },
-      h('aside', { class: 'steps' },
+    h('div', { class: 'layout' + (right ? '' : ' nochat') + (actsOpen ? '' : ' noacts') },
+      actsOpen && h('aside', { class: 'steps' },
         h('section', { class: 'card acts' },
           h('div', { class: 'eyebrow dark' }, 'Activities'),
           h('p', { class: 'start' }, h('b', {}, 'Where to start · '), `Begin with step 1${steps[0] ? `: ${steps[0].t}` : ''}. Open a step to read its explanation. The coach on the right can help any time.`),
@@ -965,7 +978,7 @@ function renderStage() {
         h('details', { class: 'card qs' }, h('summary', {}, h('span', { class: 'qicon', 'aria-hidden': 'true' }, '?'), 'Questions along the way'), h('ul', {}, st.ask.map((q) => h('li', {}, q)))),
         h('div', { class: 'bar stagenav' }, S.stage > 0 && h('button', { class: 'ghost', onclick: () => go(-1) }, '‹  Back'), S.stage < n - 1 && h('button', { class: 'primary', onclick: () => go(1) }, 'Next stage  ›'))),
       h('main', { class: 'board' }, widgets.map((w) => W[w.type](w))),
-      chatOpen && chatPanel()),
+      right),
     float);
   timerSeen.observe(timerCard);
   showClock(); scrollTo(0, y);

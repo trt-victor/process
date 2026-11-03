@@ -10,6 +10,7 @@ export const PILOT = {
   hideDesignQuestions: true, // the "Design questions for the chosen use case" box in Prioritize
   hidePrioritize: true,      // the whole Prioritize stage (its use-case voting now lives on the Scenario tab)
   stepFocusStar: false,      // the ☆ star-to-focus control in the process overview box
+  hideScenarioOptions: true, // the ready-made scenario options on the Scenario stage; the team builds one from its own board
   hideDeepDiveCanvas: true,  // the original Deep Dive & Prototype page (prompt canvas + build button); its duplicate shows only the build prompt, pre-filled from the earlier pages
 };
 
@@ -17,9 +18,10 @@ export const PILOT = {
 export const PILOT_PIECES = [
   { key: 'hidePrioritize', hides: true, label: 'Prioritize stage', note: 'The whole stage. Its use-case voting also lives on the Scenario stage.' },
   { key: 'hideDeepDiveCanvas', hides: true, label: 'Original Deep Dive page', note: 'The page with the solution-prompt canvas and the build button. Showing it replaces the prompt-only Deep Dive page.' },
+  { key: 'hideScenarioOptions', hides: true, label: 'Ready-made scenario options', note: 'On the Scenario stage: three example scenarios to start from, instead of only the one built from your board.' },
   { key: 'hideWarmup', hides: true, label: 'Warm-up games', note: 'The warm-up game and its step at the top of a stage.' },
   { key: 'hideSignalsArcade', hides: true, label: 'Signals and Arcade buttons', note: 'In this top bar: the six signals and the games.' },
-  { key: 'hideDesignQuestions', hides: true, label: 'Design questions box', note: 'On the Prioritize stage: nine questions about the chosen use case.' },
+  { key: 'hideDesignQuestions', hides: true, label: 'Design questions box', note: 'On the Prioritize stage: nine questions about the chosen use case. They are always under the coach on the Scenario stage.' },
   { key: 'stepFocusStar', hides: false, label: 'Focus star on process steps', note: 'On Today\'s Reality: the ☆ to pick one step as the focus.' },
 ];
 
